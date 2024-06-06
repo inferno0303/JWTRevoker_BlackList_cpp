@@ -1,4 +1,4 @@
-#include "BloomFilter.h"
+#include "src/BloomFilter/BloomFilter.h"
 #include <iostream>
 
 int main() {

@@ -20,18 +20,12 @@ updateTIme: 2024-06-06
 
 暂无
 
+## 编译方法
+
+```bash
+g++ main.cpp src/BloomFilter/BloomFilter.cpp -o main.exe; .\main.exe
+```
+
 ## 运行方法
 
-```shell
-# 创建python虚拟环境
-python -m virtualenv venv
-
-# 在当前终端会话中启用python虚拟环境（在cmd命令提示符下）
-venv\Scripts\activate
-
-# 安装所需依赖
-pip install -r requirements.txt
-
-# 如果要把当前已安装的pip包写入到文本文件
-pip freeze > requirements.txt
-```
+暂无
