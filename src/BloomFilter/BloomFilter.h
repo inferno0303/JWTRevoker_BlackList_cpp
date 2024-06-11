@@ -7,22 +7,24 @@
 #include <string>
 #include <functional>
 
-namespace BF {
+namespace BF
+{
 
-class BloomFilter {
-public:
-    explicit BloomFilter(size_t size);
+    class BloomFilter
+    {
+    public:
+        explicit BloomFilter(size_t size);
 
-    void add(const std::string &key);
-    bool contains(const std::string &key) const;
+        void add(const std::string &key);
+        bool contains(const std::string &key) const;
 
-private:
-    std::vector<bool> bits;
+    private:
+        std::vector<bool> bits;
 
-    std::vector<size_t> getHashIndices(const std::string &key) const;
-    size_t hash1(const std::string &key) const;
-    size_t hash2(const std::string &key) const;
-};
+        std::vector<size_t> getHashIndices(const std::string &key) const;
+        size_t hash1(const std::string &key) const;
+        size_t hash2(const std::string &key) const;
+    };
 
 } // namespace BF
 
