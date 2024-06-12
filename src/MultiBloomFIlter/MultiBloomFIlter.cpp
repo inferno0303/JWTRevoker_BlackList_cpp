@@ -10,16 +10,29 @@ MBF::MultiBloomFilter::MultiBloomFilter(time_t MAX_JWT_LIFETIME,
       BLOOMFILTER_SIZE(BLOOMFILTER_SIZE),
       HASH_FUNCTION_NUM(HASH_FUNCTION_NUM)
 {
+    if (MAX_JWT_LIFETIME == 0)
+    {
+        throw std::invalid_argument("MAX_JWT_LIFETIME cannot be zero");
+    }
+    if (FILTER_ROTATION_TIME == 0)
+    {
+        throw std::invalid_argument("FILTER_ROTATION_TIME cannot be zero");
+    }
+    if (BLOOMFILTER_SIZE == 0)
+    {
+        throw std::invalid_argument("BLOOMFILTER_SIZE cannot be zero");
+    }
     // 计算布隆过滤器的个数
     NUM_FILTERS = std::ceil(MAX_JWT_LIFETIME / FILTER_ROTATION_TIME);
 
     // 初始化 BloomFilter 对象并添加到向量中
     for (unsigned int i = 0; i < NUM_FILTERS; ++i)
     {
-        filters.push_back(BF::BloomFilter(BLOOMFILTER_SIZE));
+        filters.push_back(BF::BloomFilter(BLOOMFILTER_SIZE, HASH_FUNCTION_NUM));
     }
 }
 
+// 撤回JWT
 void MBF::MultiBloomFilter::revoke_jwt(const std::string &jwt_token, time_t exp_time)
 {
     time_t remaining_time = exp_time - time(nullptr);
@@ -30,6 +43,7 @@ void MBF::MultiBloomFilter::revoke_jwt(const std::string &jwt_token, time_t exp_
     }
 }
 
+// 验证JWT
 bool MBF::MultiBloomFilter::is_jwt_revoked(const std::string &jwt_token, time_t exp_time)
 {
     time_t remaining_time = exp_time - time(nullptr);
@@ -47,5 +61,5 @@ bool MBF::MultiBloomFilter::is_jwt_revoked(const std::string &jwt_token, time_t 
 void MBF::MultiBloomFilter::rotate_filters()
 {
     filters.erase(filters.begin());
-    filters.push_back(BF::BloomFilter(BLOOMFILTER_SIZE));
+    filters.push_back(BF::BloomFilter(BLOOMFILTER_SIZE, HASH_FUNCTION_NUM));
 }

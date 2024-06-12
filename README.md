@@ -29,3 +29,9 @@ g++ main.cpp src/BloomFilter/BloomFilter.cpp -o main.exe; .\main.exe
 ## 运行方法
 
 暂无
+
+# 更新记录
+
+- 2024-06-12
+
+实现了SHA256

@@ -12,18 +12,24 @@ namespace BF
 
     class BloomFilter
     {
-    public:
-        explicit BloomFilter(size_t size);
-
-        void add(const std::string &key);
-        bool contains(const std::string &key) const;
-
     private:
+        // Bloom filter bits array
         std::vector<bool> bits;
 
+        // The number of hash function
+        unsigned int NUM_HASH_FUNCTION;
+
         std::vector<size_t> getHashIndices(const std::string &key) const;
-        size_t hash1(const std::string &key) const;
-        size_t hash2(const std::string &key) const;
+        size_t hash_sha256(const std::string &key) const;
+
+    public:
+        BloomFilter(size_t size, unsigned int NUM_HASH_FUNCTION);
+        
+        // 写入布隆过滤器
+        void add(const std::string &key);
+
+        // 查询布隆过滤器
+        bool contains(const std::string &key) const;
     };
 
 } // namespace BF

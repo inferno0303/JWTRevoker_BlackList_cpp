@@ -1,24 +1,17 @@
-#include "src/BloomFilter/BloomFilter.h"
 #include <iostream>
+#include "src/Controller/Controller.h"
 
 int main() {
-    try {
-        // Initialize a Bloom Filter with 1000 bits
-        BF::BloomFilter filter(1000);
+    CONTROLLER::Controller sub_thread = CONTROLLER::Controller();
+    sub_thread.start();
 
-        // Add some keys to the Bloom Filter
-        filter.add("apple");
-        filter.add("banana");
-        filter.add("cherry");
+    // 主线程可以继续做其他事情
+    std::cout << "Main thread is doing other work..." << std::endl;
+    std::this_thread::sleep_for(std::chrono::seconds(10)); // 主线程的模拟工作
 
-        // Check for existence of keys
-        std::cout << "Contains 'apple': " << filter.contains("apple") << std::endl;
-        std::cout << "Contains 'banana': " << filter.contains("banana") << std::endl;
-        std::cout << "Contains 'cherry': " << filter.contains("cherry") << std::endl;
-        std::cout << "Contains 'date': " << filter.contains("date") << std::endl; // Expected output: 0 (false)
-    } catch (const std::exception& e) {
-        std::cerr << "Error: " << e.what() << std::endl;
-    }
+    // 停止工作线程
+    sub_thread.stop();
 
+    std::cout << "Main thread finished." << std::endl;
     return 0;
 }

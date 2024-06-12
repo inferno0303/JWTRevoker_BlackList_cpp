@@ -15,28 +15,28 @@ namespace MBF
     {
     private:
         // `MAX_JWT_LIFETIME`：Maximum validity period of the JWT (seconds)
-        time_t MAX_JWT_LIFETIME = 0;
+        time_t MAX_JWT_LIFETIME;
 
         // `FILTER_ROTATION_TIME`：Cycle rotation speed of the Bloom filter (seconds)
-        time_t FILTER_ROTATION_TIME = 0;
+        time_t FILTER_ROTATION_TIME;
 
         // `BLOOMFILTER_SIZE`：The size of bloom filter
-        size_t BLOOMFILTER_SIZE = 0;
+        size_t BLOOMFILTER_SIZE;
 
         // `HASH_FUNCTION_NUM`：The number of hash function
-        unsigned int HASH_FUNCTION_NUM = 0;
+        unsigned int HASH_FUNCTION_NUM;
 
         // `NUM_FILTERS`：Calculate the number of bloom filter
-        unsigned int NUM_FILTERS = 0;
+        unsigned int NUM_FILTERS;
 
         // 用于存储 BloomFilter 对象的向量
         std::vector<BF::BloomFilter> filters;
 
     public:
-        explicit MultiBloomFilter(time_t MAX_JWT_LIFETIME,
-                                  time_t FILTER_ROTATION_TIME,
-                                  size_t BLOOMFILTER_SIZE,
-                                  unsigned int HASH_FUNCTION_NUM);
+        MultiBloomFilter(time_t MAX_JWT_LIFETIME,
+                         time_t FILTER_ROTATION_TIME,
+                         size_t BLOOMFILTER_SIZE,
+                         unsigned int HASH_FUNCTION_NUM);
 
         void revoke_jwt(const std::string &jwt_token, time_t exp_time);
 
