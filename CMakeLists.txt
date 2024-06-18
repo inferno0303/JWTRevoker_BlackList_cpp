@@ -12,4 +12,9 @@ add_executable(JWTRevoker_BlackList
         src/core/BloomFilterManager/BloomFilterManager.h
         src/core/BloomFilterManager/BloomFilterManager.cpp
         src/core/CycleRotationTimerTask/CycleRotationTimerTask.h
-        src/core/CycleRotationTimerTask/CycleRotationTimerTask.cpp)
+        src/core/CycleRotationTimerTask/CycleRotationTimerTask.cpp
+        src/core/NetworkConnection/ServerSocket.h
+        src/core/NetworkConnection/ServerSocket.cpp)
+
+# 链接 ws2_32 库
+target_link_libraries(JWTRevoker_BlackList ws2_32)

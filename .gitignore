@@ -17,5 +17,8 @@ venv
 __pycache__
 *.pyc
 
+# cmake
+cmake-build-debug
+
 # exclude .gitignore
 !.gitignore

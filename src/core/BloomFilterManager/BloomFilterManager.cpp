@@ -6,14 +6,17 @@ BFM::BloomFilterManager::BloomFilterManager(time_t maxJwtLifetime, time_t bloomF
         throw std::invalid_argument("MAX_JWT_LIFETIME cannot be 0");
     }
     MAX_JWT_LIFETIME = maxJwtLifetime;
+
     if (bloomFilterRotationTime == 0) {
         throw std::invalid_argument("BLOOM_FILTER_ROTATION_TIME cannot be 0");
     }
-    BLOOM_FILTER_ROTATION_TIME = bloomFilterRotationTime;
+    this->BLOOM_FILTER_ROTATION_TIME = bloomFilterRotationTime;
+
     if (bloomFilterSize == 0) {
         throw std::invalid_argument("BLOOM_FILTER_SIZE cannot be 0");
     }
-    BLOOM_FILTER_SIZE = bloomFilterSize;
+    this->BLOOM_FILTER_SIZE = bloomFilterSize;
+
     if (numHashFunction == 0) {
         throw std::invalid_argument("NUM_HASH_FUNCTION cannot be 0");
     }

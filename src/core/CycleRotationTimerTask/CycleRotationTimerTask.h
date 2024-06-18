@@ -7,7 +7,7 @@
 #include <atomic>
 #include "../BloomFilterManager/BloomFilterManager.h"
 
-namespace CRTT {
+namespace CYCLE_ROTATION_TIMER_TASK {
 
     class CycleRotationTimerTask {
     private:

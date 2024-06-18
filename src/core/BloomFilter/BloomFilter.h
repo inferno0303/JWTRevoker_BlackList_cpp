@@ -21,9 +21,12 @@ namespace BF {
         // 哈希函数（由SHA256实现）
         static size_t hash_sha256(const std::string &key) ;
 
+        // 布隆过滤器饱和度计数
+        unsigned long long num_msg;
+
     public:
         // 构造函数
-        BloomFilter(size_t size, unsigned int NUM_HASH_FUNCTION);
+        BloomFilter(size_t size, unsigned int numHashFunction);
 
         // 写入布隆过滤器
         void add(const std::string &key);

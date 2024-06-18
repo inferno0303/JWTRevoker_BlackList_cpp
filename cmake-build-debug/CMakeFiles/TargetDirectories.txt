@@ -1,3 +1,0 @@
-C:/MyProjects/JWTRevoker_BlackList/cmake-build-debug/CMakeFiles/JWTRevoker_BlackList.dir
-C:/MyProjects/JWTRevoker_BlackList/cmake-build-debug/CMakeFiles/edit_cache.dir
-C:/MyProjects/JWTRevoker_BlackList/cmake-build-debug/CMakeFiles/rebuild_cache.dir
