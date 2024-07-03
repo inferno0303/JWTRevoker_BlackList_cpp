@@ -30,7 +30,7 @@ namespace SERVER_SOCKET {
         void clientSocketWorker(SOCKET clientSocket) const;
 
     public:
-        ServerSocket(unsigned short port);
+        explicit ServerSocket(unsigned short port);
         ~ServerSocket();
 
         // 服务器监听线程

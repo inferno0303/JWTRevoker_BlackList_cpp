@@ -1,16 +1,14 @@
-// MultiBloomFilter.h
-#ifndef BLOOM_FILTER_MANAGER_H
-#define BLOOM_FILTER_MANAGER_H
+// BloomFilter.h
+#ifndef BLOOMFILTERS_H
+#define BLOOMFILTERS_H
 
 #include <iostream>
 #include <vector>
 #include <string>
-#include <cmath>
 #include "../BloomFilter/BloomFilter.h"
 
-namespace BFM {
-
-    class BloomFilterManager {
+namespace BFS {
+    class BloomFilters {
     private:
         // `MAX_JWT_LIFETIME`：Maximum validity period of the JWT (seconds)
         time_t MAX_JWT_LIFETIME;
@@ -31,21 +29,20 @@ namespace BFM {
         std::vector<BF::BloomFilter> filters;
 
     public:
-        explicit BloomFilterManager(time_t maxJwtLifetime, time_t bloomFilterRotationTime, size_t bloomFilterSize,
-                           unsigned int numHashFunction);
+        explicit BloomFilters(time_t maxJwtLifetime, time_t bloomFilterRotationTime, size_t bloomFilterSize,
+                              unsigned int numHashFunction);
 
         // 撤回JWT
         void jwt_revoke(const std::string &jwt_token, time_t exp_time);
 
         // 检查JWT
-        bool is_jwt_revoke(const std::string &jwt_token, time_t exp_time);
+        bool is_jwt_revoke(const std::string &jwt_token, time_t exp_time) const;
 
         // 获取轮换时间
         time_t getBLOOM_FILTER_ROTATION_TIME() const;
 
         void rotate_filters();
     };
+} // namespace BFS
 
-} // namespace BFM
-
-#endif // BLOOM_FILTER_MANAGER_H
+#endif //BLOOMFILTERS_H

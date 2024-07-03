@@ -1,5 +1,5 @@
 #include <iostream>
-#include "core/BloomFilterManager/BloomFilterManager.h"
+#include "core/BloomFilters/BloomFilters.h"
 #include "core/CycleRotationTimerTask/CycleRotationTimerTask.h"
 #include "core/NetworkConnection/ServerSocket.h"
 
@@ -10,10 +10,10 @@ int main() {
     std::cout << "JWTRevoker_BlackList is Running!" << std::endl;
 
     // 初始化一些布隆过滤器
-    BFM::BloomFilterManager bloomFilterManager(3600 * 24, 1, 8 * 1024, 5);
+    const BFS::BloomFilters bloom_filters(3600 * 24, 1, 8 * 1024, 5);
 
     // 创建线程，实现周期轮换定时任务
-    CYCLE_ROTATION_TIMER_TASK::CycleRotationTimerTask cycleRotationTimerTask(bloomFilterManager);
+    CYCLE_ROTATION_TIMER_TASK::CycleRotationTimerTask cycleRotationTimerTask(bloom_filters);
     cycleRotationTimerTask.start();
 
     // 创建线程，实现服务器监听

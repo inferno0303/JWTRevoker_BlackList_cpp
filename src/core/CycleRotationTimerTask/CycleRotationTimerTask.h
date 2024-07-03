@@ -1,27 +1,24 @@
 #ifndef JWTREVOKER_BLACKLIST_CYCLE_ROTATION_TIMER_TASK_H
 #define JWTREVOKER_BLACKLIST_CYCLE_ROTATION_TIMER_TASK_H
 
-#include <iostream>
 #include <thread>
-#include <chrono>
 #include <atomic>
-#include "../BloomFilterManager/BloomFilterManager.h"
+#include "../BloomFIlters/BloomFilters.h"
 
 namespace CYCLE_ROTATION_TIMER_TASK {
 
     class CycleRotationTimerTask {
     private:
-        std::atomic<bool> stopFlag;
+        // 轮换定时任务线程
+        std::atomic<bool> stopFlag{true};
         std::thread workerThread;
-
-        // 线程任务
         void worker();
 
         // Bloom Filter Manager
-        BFM::BloomFilterManager bloomFilterManager;
+        BFS::BloomFilters bloom_filters;
 
     public:
-        explicit CycleRotationTimerTask(BFM::BloomFilterManager bfm);
+        explicit CycleRotationTimerTask(BFS::BloomFilters bloom_filters);
 
         // 启动工作线程
         void start();
