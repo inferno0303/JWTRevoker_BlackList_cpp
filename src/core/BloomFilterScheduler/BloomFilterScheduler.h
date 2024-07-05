@@ -7,7 +7,7 @@
 #include <atomic>
 #include <winsock2.h>
 #include <vector>
-#include "../BloomFIlters/BloomFilters.h"
+#include "../BloomFilters/BloomFilters.h"
 
 namespace SCHEDULER {
     class BloomFilterScheduler {

@@ -14,7 +14,7 @@ BF::BloomFilter::BloomFilter(size_t size, unsigned int numHashFunction)
 
 void BF::BloomFilter::add(const std::string &key) {
     std::vector<size_t> hashIndices = getHashIndices(key);
-    for (size_t index: hashIndices) {
+    for (const size_t index: hashIndices) {
         bits[index % bits.size()] = true;
     }
     ++num_msg;
@@ -22,7 +22,7 @@ void BF::BloomFilter::add(const std::string &key) {
 
 bool BF::BloomFilter::contains(const std::string &key) const {
     std::vector<size_t> hashIndices = getHashIndices(key);
-    for (size_t index: hashIndices) {
+    for (const size_t index: hashIndices) {
         if (!bits[index % bits.size()]) {
             return false;
         }
@@ -47,5 +47,5 @@ size_t BF::BloomFilter::hash_sha256(const std::string &key) {
     SHA256::sha256_update(&ctx, (unsigned char *) key.c_str(), key.length());
     SHA256::sha256_final(&ctx, buf);
 
-    return (size_t) buf;
+    return reinterpret_cast<size_t>(buf);
 }

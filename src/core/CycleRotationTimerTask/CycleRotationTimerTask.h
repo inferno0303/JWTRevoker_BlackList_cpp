@@ -3,7 +3,7 @@
 
 #include <thread>
 #include <atomic>
-#include "../BloomFIlters/BloomFilters.h"
+#include "../BloomFilters/BloomFilters.h"
 
 namespace CYCLE_ROTATION_TIMER_TASK {
 
