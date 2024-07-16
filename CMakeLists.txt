@@ -17,8 +17,6 @@ add_executable(JWTRevoker_BlackList
         src/core/BloomFilterEngine/BloomFilterEngine.h
         src/core/BloomFilterScheduler/BloomFilterScheduler.cpp
         src/core/BloomFilterScheduler/BloomFilterScheduler.h
-        src/core/BloomFilterScheduler/NodeReporter/NodeReporter.cpp
-        src/core/BloomFilterScheduler/NodeReporter/NodeReporter.h
         )
 
 # 链接 ws2_32 库
