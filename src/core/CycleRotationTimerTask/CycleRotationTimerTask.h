@@ -14,7 +14,6 @@ namespace CYCLE_ROTATION_TIMER_TASK {
         std::thread workerThread;
         void worker();
 
-        // Bloom Filter Manager
         BFS::BloomFilters bloom_filters;
 
     public:

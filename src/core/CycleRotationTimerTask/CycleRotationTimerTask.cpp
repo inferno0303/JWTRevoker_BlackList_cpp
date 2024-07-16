@@ -29,7 +29,7 @@ void CYCLE_ROTATION_TIMER_TASK::CycleRotationTimerTask::worker() {
         time_t t = bloom_filters.getBLOOM_FILTER_ROTATION_TIME();
         std::this_thread::sleep_for(std::chrono::seconds(t));
         if (!stopFlag.load()) {
-            // 调用 BloomFilterManager 实现轮换
+            // 调用 BloomFilterEngine 实现轮换
             bloom_filters.rotate_filters();
             std::cout << "Cycle Rotation! time:" << time(nullptr) << std::endl;
         }

@@ -1,8 +1,8 @@
 #include <cmath>
-#include "BloomFilterManager.h"
+#include "BloomFilterEngine.h"
 
-BloomFilterManager::BloomFilterManager(const time_t maxJwtLifetime, const time_t bloomFilterRotationTime,
-                                            const size_t bloomFilterSize, const unsigned int numHashFunction) {
+BloomFilterEngine::BloomFilterEngine(const time_t maxJwtLifetime, const time_t bloomFilterRotationTime,
+                                     const size_t bloomFilterSize, const unsigned int numHashFunction) {
     if (maxJwtLifetime == 0) {
         throw std::invalid_argument("MAX_JWT_LIFETIME cannot be 0");
     }
@@ -32,7 +32,7 @@ BloomFilterManager::BloomFilterManager(const time_t maxJwtLifetime, const time_t
     }
 }
 
-void BloomFilterManager::jwt_revoke(const std::string &jwt_token, time_t exp_time) {
+void BloomFilterEngine::jwt_revoke(const std::string &jwt_token, time_t exp_time) {
     const time_t remaining_time = exp_time - time(nullptr);
     const int num_filters = std::ceil(remaining_time / BLOOM_FILTER_ROTATION_TIME);
     for (int i = 0; i < num_filters; ++i) {
@@ -40,7 +40,7 @@ void BloomFilterManager::jwt_revoke(const std::string &jwt_token, time_t exp_tim
     }
 }
 
-bool BloomFilterManager::is_jwt_revoke(const std::string &jwt_token, const time_t exp_time) const {
+bool BloomFilterEngine::is_jwt_revoke(const std::string &jwt_token, const time_t exp_time) const {
     const time_t remaining_time = exp_time - time(nullptr);
     const int num_filters = std::ceil(remaining_time / BLOOM_FILTER_ROTATION_TIME);
     for (int i = 0; i < num_filters; ++i) {
@@ -51,11 +51,11 @@ bool BloomFilterManager::is_jwt_revoke(const std::string &jwt_token, const time_
     return false;
 }
 
-void BloomFilterManager::rotate_filters() {
+void BloomFilterEngine::rotate_filters() {
     filters.erase(filters.begin());
     filters.emplace_back(BLOOM_FILTER_SIZE, NUM_HASH_FUNCTION);
 }
 
-time_t BloomFilterManager::getBLOOM_FILTER_ROTATION_TIME() const {
+time_t BloomFilterEngine::getBLOOM_FILTER_ROTATION_TIME() const {
     return BLOOM_FILTER_ROTATION_TIME;
 }
