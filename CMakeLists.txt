@@ -9,15 +9,15 @@ add_executable(JWTRevoker_BlackList
         src/core/BloomFilter/BloomFilter.cpp
         src/core/SHA256/SHA256.h
         src/core/SHA256/SHA256.cpp
-        src/core/CycleRotationTimerTask/CycleRotationTimerTask.h
-        src/core/CycleRotationTimerTask/CycleRotationTimerTask.cpp
         src/core/NetworkConnection/ServerSocket.h
         src/core/NetworkConnection/ServerSocket.cpp
         src/core/BloomFilterEngine/BloomFilterEngine.cpp
         src/core/BloomFilterEngine/BloomFilterEngine.h
         src/core/BloomFilterScheduler/BloomFilterScheduler.cpp
         src/core/BloomFilterScheduler/BloomFilterScheduler.h
-        )
+        src/core/Utils/JSONString.cpp
+        src/core/Utils/nlohmann/json.hpp
+)
 
 # 链接 ws2_32 库
 target_link_libraries(JWTRevoker_BlackList ws2_32)

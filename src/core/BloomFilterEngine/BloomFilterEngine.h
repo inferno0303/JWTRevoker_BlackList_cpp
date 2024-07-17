@@ -37,10 +37,16 @@ public:
     // 检查JWT
     bool is_jwt_revoke(const std::string &jwt_token, time_t exp_time) const;
 
-    // 获取轮换时间
-    time_t getBLOOM_FILTER_ROTATION_TIME() const;
-
+    // 轮换布隆过滤器
     void rotate_filters();
+
+    // getter方法
+    time_t getMAX_JWT_LIFETIME() const;
+    time_t getBLOOM_FILTER_ROTATION_TIME() const;
+    unsigned int getNUM_BLOOM_FILTER() const;
+    std::vector<unsigned long long> getFILTERS_NUM_MSG() const;
+    size_t getBLOOM_FILTER_SIZE() const;
+    unsigned int getNUM_HASH_FUNCTION() const;
 };
 
 #endif //BLOOMFILTER_ENGINE_H

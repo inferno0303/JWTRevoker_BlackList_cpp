@@ -28,6 +28,8 @@ BloomFilterEngine::BloomFilterEngine(const time_t maxJwtLifetime, const time_t b
 
     // 初始化多个 BloomFilter 对象，并存储到向量中
     for (unsigned int i = 0; i < NUM_BLOOM_FILTER; ++i) {
+
+        // 传入的参数：布隆过滤器容量、哈希函数个数
         filters.emplace_back(BLOOM_FILTER_SIZE, NUM_HASH_FUNCTION);
     }
 }
@@ -56,6 +58,34 @@ void BloomFilterEngine::rotate_filters() {
     filters.emplace_back(BLOOM_FILTER_SIZE, NUM_HASH_FUNCTION);
 }
 
+time_t BloomFilterEngine::getMAX_JWT_LIFETIME() const {
+    return MAX_JWT_LIFETIME;
+}
+
 time_t BloomFilterEngine::getBLOOM_FILTER_ROTATION_TIME() const {
     return BLOOM_FILTER_ROTATION_TIME;
 }
+
+unsigned int BloomFilterEngine::getNUM_BLOOM_FILTER() const {
+    return NUM_BLOOM_FILTER;
+}
+
+std::vector<unsigned long long> BloomFilterEngine::getFILTERS_NUM_MSG() const {
+    std::vector<unsigned long long> FILTERS_NUM_MSG;
+    FILTERS_NUM_MSG.reserve(filters.size()); // 预先分配足够的空间
+    for(const auto& filter : filters) { // 使用引用避免拷贝
+        FILTERS_NUM_MSG.push_back(filter.getNUM_MSG());
+    }
+    return FILTERS_NUM_MSG;
+}
+
+size_t BloomFilterEngine::getBLOOM_FILTER_SIZE() const {
+    return BLOOM_FILTER_SIZE;
+}
+
+unsigned int BloomFilterEngine::getNUM_HASH_FUNCTION() const {
+    return NUM_HASH_FUNCTION;
+}
+
+
+

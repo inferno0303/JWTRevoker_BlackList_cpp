@@ -1,79 +1,61 @@
 #include "BloomFilterScheduler.h"
+#include "../Utils/nlohmann/json.hpp"
 
 BloomFilterScheduler::BloomFilterScheduler() {
-    // 布隆过滤器初始化，分配内存
-    try {
-        std::cout << "Allocation bloom filter memory..." << std::endl;
-        // 使用 std::make_shared 创建智能指针
-        this->bloomFilterEngine = std::make_shared<BloomFilterEngine>(3600 * 24, 1, 8 * 1024, 5);
-        std::cout << "Bloom filter memory allocation success!" << std::endl;
-    } catch (const std::bad_alloc &e) {
-        // 捕获内存分配失败异常
-        std::cerr << "Memory allocation failed: " << e.what() << std::endl;
-    } catch (const std::exception &e) {
-        // 捕获其他异常
-        std::cerr << "An exception occurred: " << e.what() << std::endl;
-    }
 
-    // 连接到master服务器
+    // 连接到master服务器，将套接字保存到成员变量sock中
     try {
-        SOCKET s = connectToServer(SERVER_IP, SERVER_PORT);
+        const SOCKET s = connectToServer(SERVER_IP, SERVER_PORT);
         if (s == INVALID_SOCKET) {
-            throw std::runtime_error("Auth Error！");
+            throw std::runtime_error("Connect to server error!");
         }
         this->sock = s;
     } catch (const std::exception &e) {
         std::cerr << "An exception occurred: " << e.what() << std::endl;
+        throw std::runtime_error("Connect to server error!");
+    }
+
+    // 布隆过滤器初始化，分配内存
+    try {
+        std::cout << "Allocation bloom filter memory..." << std::endl;
+        // 使用 std::make_shared 创建智能指针
+        this->bloomFilterEngine = std::make_shared<BloomFilterEngine>(3600 * 24, 3600, 8 * 1024, 5);
+        std::cout << "Bloom filter memory allocation success!" << std::endl;
+    } catch (const std::bad_alloc &e) {
+        // 捕获内存分配失败异常
+        std::cerr << "Memory allocation failed: " << e.what() << std::endl;
+        throw std::runtime_error("Memory allocation failed!");
+    } catch (const std::exception &e) {
+        // 捕获其他异常
+        std::cerr << "An exception occurred: " << e.what() << std::endl;
+        throw std::runtime_error("Memory allocation failed!");
     }
 
     // 开始执行节点信息上报模块任务线程
     startReportStatusThread();
+
+    // 开始执行接收信息线程
+    startReceiveThread();
+
+    // 开始执行处理命令线程
+    startProcessCommandsThread();
 
     // 开始执行周期轮换线程
     startCycleRotationThread();
 }
 
 BloomFilterScheduler::~BloomFilterScheduler() {
-    stopCycleRotationThread();
     stopReportStatusThread();
+    stopReceiveThread();
+    stopProcessCommandsThread();
+    stopCycleRotationThread();
 }
 
-std::shared_ptr<BloomFilterEngine> BloomFilterScheduler::getBloomFilterEngine() {
-    return bloomFilterEngine;
-}
-
-void BloomFilterScheduler::cycleRotationWorker() {
-    while (cycleRotationRunFlag.load()) {
-        // 根据轮换时间间隔，实现周期轮换
-        const time_t t = bloomFilterEngine->getBLOOM_FILTER_ROTATION_TIME();
-        std::this_thread::sleep_for(std::chrono::seconds(t));
-        if (cycleRotationRunFlag.load()) {
-            // 调用 BloomFilterEngine 的方法进行周期轮换
-            bloomFilterEngine->rotate_filters();
-            std::cout << "Cycle Rotation! time:" << time(nullptr) << std::endl;
-        }
-    }
-}
-
-void BloomFilterScheduler::startCycleRotationThread() {
-    if (!cycleRotationThread.joinable()) {
-        cycleRotationRunFlag.store(true);
-        cycleRotationThread = std::thread(&BloomFilterScheduler::cycleRotationWorker, this);
-    }
-}
-
-void BloomFilterScheduler::stopCycleRotationThread() {
-    cycleRotationRunFlag.store(false);
-    if (cycleRotationThread.joinable()) {
-        // 等待线程结束
-        cycleRotationThread.join();
-    }
-}
-
+// 连接到服务器
 SOCKET BloomFilterScheduler::connectToServer(const char *server_ip, const unsigned short server_port) {
     WSADATA wsaData;
     auto sock = INVALID_SOCKET;
-    struct sockaddr_in server_addr{};
+    sockaddr_in server_addr{};
     char buffer[BUFFER_SIZE] = {0};
 
     // 初始化WinSock
@@ -83,7 +65,7 @@ SOCKET BloomFilterScheduler::connectToServer(const char *server_ip, const unsign
 
     // 创建套接字
     if ((sock = socket(AF_INET, SOCK_STREAM, 0)) == INVALID_SOCKET) {
-        int errorCode = WSAGetLastError();
+        const int errorCode = WSAGetLastError();
         WSACleanup();
         throw std::runtime_error("Socket creation error: " + std::to_string(errorCode));
     }
@@ -100,42 +82,52 @@ SOCKET BloomFilterScheduler::connectToServer(const char *server_ip, const unsign
     }
 
     // 连接到服务端
-    if (connect(sock, (struct sockaddr *) &server_addr, sizeof(server_addr)) < 0) {
-        int errorCode = WSAGetLastError();
+    if (connect(sock, reinterpret_cast<sockaddr *>(&server_addr), sizeof(server_addr)) < 0) {
+        const int errorCode = WSAGetLastError();
         closesocket(sock);
         WSACleanup();
         throw std::runtime_error("Connection Failed: " + std::to_string(errorCode));
     }
 
     // 发送认证信息
-    const char *hello_msg = "hello from client";
-    send(sock, hello_msg, strlen(hello_msg), 0);
-    std::cout << "Message sent: " << hello_msg << std::endl;
+    const auto hello_msg = "hello from client, uid = 001, token = 12345";
+    send(sock, hello_msg, static_cast<int>(strlen(hello_msg)), 0);
+    std::cout << "Auth message sent: " << hello_msg << std::endl;
 
     // 接收认证信息
-    int recvLen = recv(sock, buffer, BUFFER_SIZE, 0);
+    const int recvLen = recv(sock, buffer, BUFFER_SIZE, 0);
     if (recvLen > 0) {
         buffer[recvLen] = '\0';
         std::cout << "Server response: " << buffer << std::endl;
         return sock;
-    } else {
-        closesocket(sock);
-        return INVALID_SOCKET;
     }
+    closesocket(sock);
+    return INVALID_SOCKET;
 }
 
-void BloomFilterScheduler::reportStatusWorker() {
+void BloomFilterScheduler::reportStatusWorker() const {
     // 定时发送节点状态信息
     while (reportStatusRunFlag) {
-        // 收集 BloomFilterEngine 信息
+        // 收集 BloomFilterEngine 的信息，并创建 JSON 对象
+        nlohmann::json _data;
+        _data["MAX_JWT_LIFETIME"] = bloomFilterEngine->getMAX_JWT_LIFETIME(); // T^max_i
+        _data["BLOOM_FILTER_ROTATION_TIME"] = bloomFilterEngine->getBLOOM_FILTER_ROTATION_TIME(); // T^w_i
+        _data["NUM_BLOOM_FILTER"] = bloomFilterEngine->getNUM_BLOOM_FILTER(); // n^bf_i
+        _data["FILTERS_NUM_MSG"] = bloomFilterEngine->getFILTERS_NUM_MSG(); // n^jwt_(i-1,j)
+        _data["BLOOM_FILTER_SIZE"] = bloomFilterEngine->getBLOOM_FILTER_SIZE(); // m^bf_i
+        _data["NUM_HASH_FUNCTION"] = bloomFilterEngine->getNUM_HASH_FUNCTION(); // k^hash_i
 
+        // 将 JSON 对象转换为字符串
+        std::string status_msg = R"({"event":"node_status","data":)" + _data.dump() + "}";
 
-        // 发送
-        const char *status_msg = R"({"event": "node_status_report", "data": "ok"})";
-        send(sock, status_msg, strlen(status_msg), 0);
-        std::cout << "[node report] Status sent: " << status_msg << std::endl;
+        // 发送字符串数据
+        const char *msg = status_msg.c_str();
+        if (sock != INVALID_SOCKET) {
+            send(sock, msg, static_cast<int>(strlen(msg)), 0);
+            // std::cout << "[node_status] sent: " << msg << std::endl;
+        }
 
-        // 等待
+        // 等待一段时间
         std::this_thread::sleep_for(std::chrono::seconds(INTERVAL));
     }
 }
@@ -174,15 +166,25 @@ void BloomFilterScheduler::receiveWorker() {
     char buffer[BUFFER_SIZE];
     while (receiveRunFlag) {
         // 接收
-        int recvLen = recv(sock, buffer, BUFFER_SIZE, 0);
+        const int recvLen = recv(sock, buffer, BUFFER_SIZE, 0);
         if (recvLen > 0) {
             buffer[recvLen] = '\0';
             std::cout << "[server response] server response: " << buffer << std::endl;
+
+            // 检查是否为 ping 消息
+            if (strstr(buffer, "ping from server") != nullptr) {
+                // 发送 pong 消息
+                if (sock != INVALID_SOCKET) {
+                    const auto msg = "pong from client, uid = 001, token = 12345";
+                    send(sock, msg, static_cast<int>(strlen(msg)), 0);
+                }
+            }
 
             // 检查是否为命令
             if (strstr(buffer, R"({"event": "cmd")") != nullptr) {
                 std::lock_guard<std::mutex> lock(cmdMutex);
                 receivedCmd.assign(buffer);
+                // 唤醒处理命令线程
                 cmdCv.notify_one();
             }
         }
@@ -217,7 +219,30 @@ void BloomFilterScheduler::processCommandsWorker() {
     }
 }
 
-std::string BloomFilterScheduler::collectBloomFilterEngineInfo() {
-    const char *status_msg = R"({"event": "node_status_report", "data": "ok"})";
-    return std::string("hello world");
+void BloomFilterScheduler::cycleRotationWorker() const {
+    while (cycleRotationRunFlag.load()) {
+        // 根据轮换时间间隔，实现周期轮换
+        const time_t t = bloomFilterEngine->getBLOOM_FILTER_ROTATION_TIME();
+        std::this_thread::sleep_for(std::chrono::seconds(t));
+        if (cycleRotationRunFlag.load()) {
+            // 调用 BloomFilterEngine 的方法进行周期轮换
+            bloomFilterEngine->rotate_filters();
+            std::cout << "Cycle Rotation! time:" << time(nullptr) << std::endl;
+        }
+    }
+}
+
+void BloomFilterScheduler::startCycleRotationThread() {
+    if (!cycleRotationThread.joinable()) {
+        cycleRotationRunFlag.store(true);
+        cycleRotationThread = std::thread(&BloomFilterScheduler::cycleRotationWorker, this);
+    }
+}
+
+void BloomFilterScheduler::stopCycleRotationThread() {
+    cycleRotationRunFlag.store(false);
+    if (cycleRotationThread.joinable()) {
+        // 等待线程结束
+        cycleRotationThread.join();
+    }
 }

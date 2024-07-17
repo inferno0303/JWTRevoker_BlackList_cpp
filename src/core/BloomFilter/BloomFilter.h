@@ -22,7 +22,7 @@ namespace BF {
         static size_t hash_sha256(const std::string &key) ;
 
         // 布隆过滤器饱和度计数
-        unsigned long long num_msg;
+        unsigned long long NUM_MSG{0};
 
     public:
         // 构造函数
@@ -33,6 +33,9 @@ namespace BF {
 
         // 查询布隆过滤器
         bool contains(const std::string &key) const;
+
+        // 获取布隆过滤器饱和度计数
+        unsigned long long getNUM_MSG() const;
     };
 
 } // namespace BF

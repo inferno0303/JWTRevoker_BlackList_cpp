@@ -24,13 +24,6 @@ private:
     // BloomFilterEngine 资源共享智能指针
     std::shared_ptr<BloomFilterEngine> bloomFilterEngine;
 
-    // 周期轮换定时任务线程
-    std::atomic<bool> cycleRotationRunFlag{false};
-    std::thread cycleRotationThread;
-    void cycleRotationWorker();
-    void startCycleRotationThread();
-    void stopCycleRotationThread();
-
     // 连接master服务器
     static SOCKET connectToServer(const char *, unsigned short);
     SOCKET sock{};
@@ -38,12 +31,9 @@ private:
     // 上报状态线程
     std::atomic<bool> reportStatusRunFlag{false};
     std::thread reportStatusThread;
-    void reportStatusWorker();
+    void reportStatusWorker() const;
     void startReportStatusThread();
     void stopReportStatusThread();
-
-    // 收集信息函数
-    std::string collectBloomFilterEngineInfo();
 
     // 接收信息线程
     std::atomic<bool> receiveRunFlag{false};
@@ -66,6 +56,13 @@ private:
     void startProcessCommandsThread();
     void stopProcessCommandsThread();
 
+    // 周期轮换定时任务线程
+    std::atomic<bool> cycleRotationRunFlag{false};
+    std::thread cycleRotationThread;
+    void cycleRotationWorker() const;
+    void startCycleRotationThread();
+    void stopCycleRotationThread();
+
 
 public:
     BloomFilterScheduler();
@@ -73,7 +70,7 @@ public:
     ~BloomFilterScheduler();
 
     // 允许其他对象访问 BloomFilterEngine 共享指针
-    std::shared_ptr<BloomFilterEngine> getBloomFilterEngine();
+    // std::shared_ptr<BloomFilterEngine> getBloomFilterEngine();
 
 };
 

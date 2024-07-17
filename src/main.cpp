@@ -6,10 +6,10 @@
 
 int main() {
 
-    std::cout << "JWTRevoker_BlackList is Running!" << std::endl;
+    std::cout << "JWTRevoker_BlackList is starting..." << std::endl;
 
     BloomFilterScheduler bloomFilterScheduler{};
-    std::shared_ptr<BloomFilterEngine> bloomFilterEngine = bloomFilterScheduler.getBloomFilterEngine();
+    // std::shared_ptr<BloomFilterEngine> bloomFilterEngine = bloomFilterScheduler.getBloomFilterEngine();
 
     // 创建线程，实现服务器监听
     SERVER_SOCKET::ServerSocket serverSocket(PORT);

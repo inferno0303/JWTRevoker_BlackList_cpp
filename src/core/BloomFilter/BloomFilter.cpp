@@ -1,8 +1,8 @@
 #include "BloomFilter.h"
 #include "../SHA256/SHA256.h"
 
-BF::BloomFilter::BloomFilter(size_t size, unsigned int numHashFunction)
-        : NUM_HASH_FUNCTION(numHashFunction), num_msg(0) {
+BF::BloomFilter::BloomFilter(const size_t size, const unsigned int numHashFunction)
+        : NUM_HASH_FUNCTION(numHashFunction) {
     if (size == 0) {
         throw std::invalid_argument("Size of BloomFilter cannot be zero");
     }
@@ -17,7 +17,8 @@ void BF::BloomFilter::add(const std::string &key) {
     for (const size_t index: hashIndices) {
         bits[index % bits.size()] = true;
     }
-    ++num_msg;
+    // 饱和度计数
+    ++NUM_MSG;
 }
 
 bool BF::BloomFilter::contains(const std::string &key) const {
@@ -48,4 +49,8 @@ size_t BF::BloomFilter::hash_sha256(const std::string &key) {
     SHA256::sha256_final(&ctx, buf);
 
     return reinterpret_cast<size_t>(buf);
+}
+
+unsigned long long BF::BloomFilter::getNUM_MSG() const {
+    return NUM_MSG;
 }
