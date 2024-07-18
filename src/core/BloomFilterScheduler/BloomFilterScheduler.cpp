@@ -51,7 +51,7 @@ BloomFilterScheduler::~BloomFilterScheduler() {
     stopCycleRotationThread();
 }
 
-// 连接到服务器
+// 连接到服务器，包含认证
 SOCKET BloomFilterScheduler::connectToServer(const char *server_ip, const unsigned short server_port) {
     WSADATA wsaData;
     auto sock = INVALID_SOCKET;
@@ -90,15 +90,18 @@ SOCKET BloomFilterScheduler::connectToServer(const char *server_ip, const unsign
     }
 
     // 发送认证信息
-    const auto hello_msg = "hello from client, uid = 001, token = 12345";
-    send(sock, hello_msg, static_cast<int>(strlen(hello_msg)), 0);
-    std::cout << "Auth message sent: " << hello_msg << std::endl;
+    nlohmann::json _data;
+    _data["uid"] = "0001";
+    _data["token"] = "abcde";
+    const std::string hello_msg = R"({"event":"hello_from_client","data":)" + _data.dump() + "}";
+    send(sock, hello_msg.c_str(), static_cast<int>(strlen(hello_msg.c_str())), 0);
+    std::cout << "Client event: " << hello_msg.c_str() << std::endl;
 
     // 接收认证信息
     const int recvLen = recv(sock, buffer, BUFFER_SIZE, 0);
     if (recvLen > 0) {
         buffer[recvLen] = '\0';
-        std::cout << "Server response: " << buffer << std::endl;
+        std::cout << "Server event: " << buffer << std::endl;
         return sock;
     }
     closesocket(sock);
@@ -108,23 +111,22 @@ SOCKET BloomFilterScheduler::connectToServer(const char *server_ip, const unsign
 void BloomFilterScheduler::reportStatusWorker() const {
     // 定时发送节点状态信息
     while (reportStatusRunFlag) {
-        // 收集 BloomFilterEngine 的信息，并创建 JSON 对象
+
+        // 收集节点状态信息
         nlohmann::json _data;
+        _data["uid"] = "0001";
         _data["MAX_JWT_LIFETIME"] = bloomFilterEngine->getMAX_JWT_LIFETIME(); // T^max_i
         _data["BLOOM_FILTER_ROTATION_TIME"] = bloomFilterEngine->getBLOOM_FILTER_ROTATION_TIME(); // T^w_i
         _data["NUM_BLOOM_FILTER"] = bloomFilterEngine->getNUM_BLOOM_FILTER(); // n^bf_i
         _data["FILTERS_NUM_MSG"] = bloomFilterEngine->getFILTERS_NUM_MSG(); // n^jwt_(i-1,j)
         _data["BLOOM_FILTER_SIZE"] = bloomFilterEngine->getBLOOM_FILTER_SIZE(); // m^bf_i
         _data["NUM_HASH_FUNCTION"] = bloomFilterEngine->getNUM_HASH_FUNCTION(); // k^hash_i
+        std::string msg = R"({"event":"node_status_report","data":)" + _data.dump() + "}";
 
-        // 将 JSON 对象转换为字符串
-        std::string status_msg = R"({"event":"node_status","data":)" + _data.dump() + "}";
-
-        // 发送字符串数据
-        const char *msg = status_msg.c_str();
+        // 发送数据
         if (sock != INVALID_SOCKET) {
-            send(sock, msg, static_cast<int>(strlen(msg)), 0);
-            // std::cout << "[node_status] sent: " << msg << std::endl;
+            send(sock, msg.c_str(), static_cast<int>(strlen(msg.c_str())), 0);
+            // std::cout << "[node_status] sent: " << msg.c_str() << std::endl;
         }
 
         // 等待一段时间
@@ -165,27 +167,28 @@ void BloomFilterScheduler::stopReceiveThread() {
 void BloomFilterScheduler::receiveWorker() {
     char buffer[BUFFER_SIZE];
     while (receiveRunFlag) {
-        // 接收
         const int recvLen = recv(sock, buffer, BUFFER_SIZE, 0);
         if (recvLen > 0) {
             buffer[recvLen] = '\0';
-            std::cout << "[server response] server response: " << buffer << std::endl;
+            std::cout << "Server event: " << buffer << std::endl;
 
-            // 检查是否为 ping 消息
-            if (strstr(buffer, "ping from server") != nullptr) {
-                // 发送 pong 消息
-                if (sock != INVALID_SOCKET) {
-                    const auto msg = "pong from client, uid = 001, token = 12345";
-                    send(sock, msg, static_cast<int>(strlen(msg)), 0);
+            // 解析JSON字符串
+            try {
+                nlohmann::json jsonObject = nlohmann::json::parse(buffer);
+
+                // 如果接收到 event 关键字
+                std::string event = jsonObject["event"];
+                if (!event.empty()) {
+                    std::lock_guard<std::mutex> lock(cmdMutex);
+                    receivedCmd.assign(buffer);
+
+                    // 唤醒处理命令线程
+                    cmdCv.notify_one();
                 }
-            }
-
-            // 检查是否为命令
-            if (strstr(buffer, R"({"event": "cmd")") != nullptr) {
-                std::lock_guard<std::mutex> lock(cmdMutex);
-                receivedCmd.assign(buffer);
-                // 唤醒处理命令线程
-                cmdCv.notify_one();
+            } catch (nlohmann::json::parse_error& e) {
+                std::cerr << "JSON parse error: " << e.what() << std::endl;
+            } catch (std::exception& e) {
+                std::cerr << "Runtime exception: " << e.what() << std::endl;
             }
         }
     }
@@ -211,10 +214,36 @@ void BloomFilterScheduler::processCommandsWorker() {
         std::unique_lock<std::mutex> lock(cmdMutex);
         cmdCv.wait(lock, [this] { return !this->receivedCmd.empty(); });
 
-        // 处理接收到的命令
-        std::cout << "[command processor] Processing command: " << receivedCmd << std::endl;
+        try {
+            // 解析JSON字符串
+            nlohmann::json jsonObject = nlohmann::json::parse(receivedCmd);
+            std::string event = jsonObject["event"];
+            std::string data = jsonObject["data"];
 
-        // 处理完毕，清空命令
+            // 如果接收到 ping_from_server 事件
+            if (event == "ping_from_server") {
+                nlohmann::json dataObject = nlohmann::json::parse(data);
+                std::string client_uid = dataObject["client_uid"];
+                if (client_uid == "0001") {
+                    // 发送 pong_from_client 消息
+                    nlohmann::json _data;
+                    _data["uid"] = "0001";
+                    std::string msg = R"({"event":"pong_from_client","data":)" + _data.dump() + "}";
+                    if (sock != INVALID_SOCKET) {
+                        send(sock, msg.c_str(), static_cast<int>(strlen(msg.c_str())), 0);
+                    }
+                }
+            }
+
+            // 如果接收到 其他 事件
+
+        } catch (nlohmann::json::parse_error& e) {
+            std::cerr << "JSON parse error: " << e.what() << std::endl;
+        } catch (std::exception& e) {
+            std::cerr << "Runtime exception2: " << e.what() << std::endl;
+        }
+
+        // 处理完毕，清空
         receivedCmd.clear();
     }
 }

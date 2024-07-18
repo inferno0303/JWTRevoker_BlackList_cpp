@@ -15,7 +15,6 @@ add_executable(JWTRevoker_BlackList
         src/core/BloomFilterEngine/BloomFilterEngine.h
         src/core/BloomFilterScheduler/BloomFilterScheduler.cpp
         src/core/BloomFilterScheduler/BloomFilterScheduler.h
-        src/core/Utils/JSONString.cpp
         src/core/Utils/nlohmann/json.hpp
 )
 

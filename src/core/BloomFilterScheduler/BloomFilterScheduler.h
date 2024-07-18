@@ -35,7 +35,7 @@ private:
     void startReportStatusThread();
     void stopReportStatusThread();
 
-    // 接收信息线程
+    // 接收事件消息线程
     std::atomic<bool> receiveRunFlag{false};
     std::thread receiveThread;
     void receiveWorker();
