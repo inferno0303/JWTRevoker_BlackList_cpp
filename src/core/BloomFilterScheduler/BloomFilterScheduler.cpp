@@ -32,7 +32,7 @@ BloomFilterScheduler::BloomFilterScheduler() {
     }
 
     // 开始执行节点信息上报模块任务线程
-    startReportStatusThread();
+    // startReportStatusThread();
 
     // 开始执行接收信息线程
     startReceiveThread();
@@ -170,7 +170,7 @@ void BloomFilterScheduler::receiveWorker() {
         const int recvLen = recv(sock, buffer, BUFFER_SIZE, 0);
         if (recvLen > 0) {
             buffer[recvLen] = '\0';
-            std::cout << "Server event: " << buffer << std::endl;
+            std::cout << "[Server event] " << buffer << std::endl;
 
             // 解析JSON字符串
             try {
@@ -179,11 +179,11 @@ void BloomFilterScheduler::receiveWorker() {
                 // 如果接收到 event 关键字
                 std::string event = jsonObject["event"];
                 if (!event.empty()) {
-                    std::lock_guard<std::mutex> lock(cmdMutex);
-                    receivedCmd.assign(buffer);
-
-                    // 唤醒处理命令线程
-                    cmdCv.notify_one();
+                    // std::lock_guard<std::mutex> lock(cmdMutex);
+                    // receivedCmd.assign(buffer);
+                    //
+                    // // 唤醒处理命令线程
+                    // cmdCv.notify_one();
                 }
             } catch (nlohmann::json::parse_error& e) {
                 std::cerr << "JSON parse error: " << e.what() << std::endl;
