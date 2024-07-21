@@ -32,7 +32,7 @@ BloomFilterScheduler::BloomFilterScheduler() {
     }
 
     // 开始执行节点信息上报模块任务线程
-    // startReportStatusThread();
+    startReportStatusThread();
 
     // 开始执行接收信息线程
     startReceiveThread();
@@ -56,7 +56,7 @@ SOCKET BloomFilterScheduler::connectToServer(const char *server_ip, const unsign
     WSADATA wsaData;
     auto sock = INVALID_SOCKET;
     sockaddr_in server_addr{};
-    char buffer[BUFFER_SIZE] = {0};
+    char buffer[BUFFER_SIZE] = {};
 
     // 初始化WinSock
     if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0) {
@@ -98,7 +98,7 @@ SOCKET BloomFilterScheduler::connectToServer(const char *server_ip, const unsign
     std::cout << "Client event: " << hello_msg.c_str() << std::endl;
 
     // 接收认证信息
-    const int recvLen = recv(sock, buffer, BUFFER_SIZE, 0);
+    const int recvLen = recv(sock, buffer, BUFFER_SIZE - 1, 0);
     if (recvLen > 0) {
         buffer[recvLen] = '\0';
         std::cout << "Server event: " << buffer << std::endl;
@@ -165,32 +165,26 @@ void BloomFilterScheduler::stopReceiveThread() {
 }
 
 void BloomFilterScheduler::receiveWorker() {
-    char buffer[BUFFER_SIZE];
+    char buffer[BUFFER_SIZE] = {};
     while (receiveRunFlag) {
-        const int recvLen = recv(sock, buffer, BUFFER_SIZE, 0);
+        const int recvLen = recv(sock, buffer, BUFFER_SIZE - 1, 0);
+        std::cout << recvLen << std::endl;
         if (recvLen > 0) {
             buffer[recvLen] = '\0';
             std::cout << "[Server event] " << buffer << std::endl;
-
-            // 解析JSON字符串
-            try {
-                nlohmann::json jsonObject = nlohmann::json::parse(buffer);
-
-                // 如果接收到 event 关键字
-                std::string event = jsonObject["event"];
-                if (!event.empty()) {
-                    // std::lock_guard<std::mutex> lock(cmdMutex);
-                    // receivedCmd.assign(buffer);
-                    //
-                    // // 唤醒处理命令线程
-                    // cmdCv.notify_one();
-                }
-            } catch (nlohmann::json::parse_error& e) {
-                std::cerr << "JSON parse error: " << e.what() << std::endl;
-            } catch (std::exception& e) {
-                std::cerr << "Runtime exception: " << e.what() << std::endl;
-            }
+            // 分配内存并复制字符串
+            const char* const receivedEvent = new char[BUFFER_SIZE]{};
+            std::strcpy(const_cast<char* const>(receivedEvent), buffer);
+            // 加锁
+            std::unique_lock<std::mutex> lock(receivedEventMutex);
+            // 将字符串指针添加到队列尾
+            receivedEventQueue.push(receivedEvent);
+            // 释放锁
+            lock.unlock();
+            // 唤醒处理事件线程
+            receivedEventCv.notify_one();
         }
+        std::memset(buffer, '\0', BUFFER_SIZE);
     }
 }
 
@@ -211,19 +205,24 @@ void BloomFilterScheduler::stopProcessCommandsThread() {
 
 void BloomFilterScheduler::processCommandsWorker() {
     while (processCommandsRunFlag) {
-        std::unique_lock<std::mutex> lock(cmdMutex);
-        cmdCv.wait(lock, [this] { return !this->receivedCmd.empty(); });
-
+        // 获取锁
+        std::unique_lock<std::mutex> lock(receivedEventMutex);
+        // 如果队列非空则继续保持锁，队列空则释放锁
+        receivedEventCv.wait(lock, [this] { return !this->receivedEventQueue.empty(); });
+        // 获取队列头元素
+        const char* const receivedEvent = receivedEventQueue.front();
+        // 移除队列头元素
+        receivedEventQueue.pop();
         try {
             // 解析JSON字符串
-            nlohmann::json jsonObject = nlohmann::json::parse(receivedCmd);
-            std::string event = jsonObject["event"];
-            std::string data = jsonObject["data"];
+            nlohmann::json jsonObject = nlohmann::json::parse(receivedEvent);
 
+            // 解析 event 事件
+            std::string event = jsonObject["event"];
             // 如果接收到 ping_from_server 事件
             if (event == "ping_from_server") {
-                nlohmann::json dataObject = nlohmann::json::parse(data);
-                std::string client_uid = dataObject["client_uid"];
+                // 解析 data 数据
+                std::string client_uid = jsonObject["data"]["client_uid"];
                 if (client_uid == "0001") {
                     // 发送 pong_from_client 消息
                     nlohmann::json _data;
@@ -234,17 +233,16 @@ void BloomFilterScheduler::processCommandsWorker() {
                     }
                 }
             }
-
             // 如果接收到 其他 事件
 
         } catch (nlohmann::json::parse_error& e) {
             std::cerr << "JSON parse error: " << e.what() << std::endl;
+            std::cerr << receivedEvent << std::endl;
         } catch (std::exception& e) {
             std::cerr << "Runtime exception2: " << e.what() << std::endl;
         }
-
-        // 处理完毕，清空
-        receivedCmd.clear();
+        // 释放分配的内存
+        delete[] receivedEvent;
     }
 }
 

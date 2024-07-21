@@ -9,13 +9,13 @@ SERVER_SOCKET::ServerSocket::ServerSocket(unsigned short port) {
 
     // 初始化WinSock
     if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0) {
-        int errorCode = WSAGetLastError();
+        const int errorCode = WSAGetLastError();
         throw std::runtime_error("WSAStartup failed: " + std::to_string(errorCode));
     }
 
     // 创建套接字
     if ((serverSocket = socket(AF_INET, SOCK_STREAM, 0)) == INVALID_SOCKET) {
-        int errorCode = WSAGetLastError();
+        const int errorCode = WSAGetLastError();
         WSACleanup();
         throw std::runtime_error("Socket creation failed: " + std::to_string(errorCode));
     }
@@ -26,8 +26,8 @@ SERVER_SOCKET::ServerSocket::ServerSocket(unsigned short port) {
     serverAddr.sin_port = htons(PORT);
 
     // 绑定套接字到端口
-    if (bind(serverSocket, (struct sockaddr *) &serverAddr, sizeof(serverAddr)) == SOCKET_ERROR) {
-        int errorCode = WSAGetLastError();
+    if (bind(serverSocket, reinterpret_cast<sockaddr*>(&serverAddr), sizeof(serverAddr)) == SOCKET_ERROR) {
+        const int errorCode = WSAGetLastError();
         closesocket(serverSocket);
         WSACleanup();
         throw std::runtime_error("Bind failed: " + std::to_string(errorCode));
@@ -35,7 +35,7 @@ SERVER_SOCKET::ServerSocket::ServerSocket(unsigned short port) {
 
     // 监听端口
     if (listen(serverSocket, 3) == SOCKET_ERROR) {
-        int errorCode = WSAGetLastError();
+        const int errorCode = WSAGetLastError();
         closesocket(serverSocket);
         WSACleanup();
         throw std::runtime_error("Listen failed: " + std::to_string(errorCode));
@@ -69,7 +69,7 @@ void SERVER_SOCKET::ServerSocket::serverListenWorker() {
     // 主循环，接受客户端连接
     int clientAddrSize = sizeof(clientAddr);
     while (!stopServerListenFlag.load()) {
-        if ((clientSocket = accept(serverSocket, (struct sockaddr *) &clientAddr, &clientAddrSize)) == INVALID_SOCKET) {
+        if ((clientSocket = accept(serverSocket, reinterpret_cast<sockaddr*>(&clientAddr), &clientAddrSize)) == INVALID_SOCKET) {
             int errorCode = WSAGetLastError();
             closesocket(serverSocket);
             WSACleanup();

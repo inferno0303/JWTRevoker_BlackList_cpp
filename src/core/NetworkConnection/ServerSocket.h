@@ -9,7 +9,7 @@
 #include <winsock2.h>
 #include <vector>
 
-#define BUFFER_SIZE 1024
+#define BUFFER_SIZE 4096
 
 namespace SERVER_SOCKET {
 

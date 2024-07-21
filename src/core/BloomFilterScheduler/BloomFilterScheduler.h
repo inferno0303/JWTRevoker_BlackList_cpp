@@ -8,6 +8,7 @@
 #include <memory>
 #include <mutex>
 #include <condition_variable>
+#include <queue>
 #include <winsock2.h>
 #include <ws2tcpip.h>
 #include "../BloomFilterEngine/BloomFilterEngine.h"
@@ -16,8 +17,8 @@
 
 #define SERVER_IP "127.0.0.1"
 #define SERVER_PORT 9999
-#define BUFFER_SIZE 1024
-#define INTERVAL 5 // 时间间隔，单位：秒
+#define BUFFER_SIZE 65535
+#define INTERVAL 10 // 时间间隔，单位：秒
 
 class BloomFilterScheduler {
 private:
@@ -42,12 +43,12 @@ private:
     void startReceiveThread();
     void stopReceiveThread();
 
-    // 接收信息线程 与 处理命令线程 线程间同步互斥锁、条件变量
-    std::mutex cmdMutex;
-    std::condition_variable cmdCv;
-
     // 接收到的命令
-    std::string receivedCmd;
+    std::queue<const char*> receivedEventQueue;
+
+    // 接收信息线程 与 处理命令线程 线程间同步互斥锁、条件变量
+    std::mutex receivedEventMutex;
+    std::condition_variable receivedEventCv;
 
     // 处理命令线程
     std::atomic<bool> processCommandsRunFlag{false};
