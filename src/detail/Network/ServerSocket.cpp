@@ -1,6 +1,6 @@
 #include "ServerSocket.h"
 
-SERVER_SOCKET::ServerSocket::ServerSocket(unsigned short port) {
+SERVER_SOCKET::ServerSocket::ServerSocket(const unsigned short port) {
     // 设置端口号
     if (port < 80) {
         throw std::invalid_argument("The port number cannot be less than 80.");
@@ -9,8 +9,7 @@ SERVER_SOCKET::ServerSocket::ServerSocket(unsigned short port) {
 
     // 初始化WinSock
     if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0) {
-        const int errorCode = WSAGetLastError();
-        throw std::runtime_error("WSAStartup failed: " + std::to_string(errorCode));
+        throw std::runtime_error("WSAStartup failed: " + std::to_string(WSAGetLastError()));
     }
 
     // 创建套接字

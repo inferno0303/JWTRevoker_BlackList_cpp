@@ -1,5 +1,5 @@
 #include "BloomFilterScheduler.h"
-#include "../Utils/nlohmann/json.hpp"
+#include "../ThirdPartyLibs/nlohmann/json.hpp"
 
 BloomFilterScheduler::BloomFilterScheduler() {
 
@@ -52,8 +52,8 @@ BloomFilterScheduler::~BloomFilterScheduler() {
 }
 
 // 连接到服务器，包含认证
-SOCKET BloomFilterScheduler::connectToServer(const char *server_ip, const unsigned short server_port) {
-    WSADATA wsaData;
+SOCKET BloomFilterScheduler::connectToServer(const char* server_ip, const unsigned short server_port) {
+    WSADATA wsaData{};
     auto sock = INVALID_SOCKET;
     sockaddr_in server_addr{};
     char buffer[BUFFER_SIZE] = {};

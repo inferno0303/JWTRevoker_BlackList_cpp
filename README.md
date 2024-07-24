@@ -6,7 +6,7 @@
 
 createTime: 2024-06-06
 
-updateTIme: 2024-07-16
+updateTIme: 2024-07-25
 
 # 介绍
 
@@ -28,6 +28,7 @@ JSON library for C++ nlohmann/json: https://github.com/nlohmann/json
 ## 编译方法
 
 ```bash
+
 g++ main.cpp src/BloomFilter/BloomFilter.cpp -o main.exe; .\main.exe
 ```
 
@@ -37,14 +38,20 @@ g++ main.cpp src/BloomFilter/BloomFilter.cpp -o main.exe; .\main.exe
 
 # 更新记录
 
-- 2024-06-12
+### 2024-06-12
 
 实现了SHA256
 
-- 2024-07-16
+### 2024-07-16
 
 存档
 
-- 2024-07-21
+### 2024-07-21
 
 存档
+
+### 2024-07-25
+
+- 实现了线程安全队列
+- 实现了非阻塞事件驱动的消息收发机制
+- 实现了向 master 服务器身份认证

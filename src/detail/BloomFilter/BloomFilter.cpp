@@ -1,5 +1,5 @@
 #include "BloomFilter.h"
-#include "../SHA256/SHA256.h"
+#include "SHA256/SHA256.h"
 
 BF::BloomFilter::BloomFilter(const size_t size, const unsigned int numHashFunction)
         : NUM_HASH_FUNCTION(numHashFunction) {
