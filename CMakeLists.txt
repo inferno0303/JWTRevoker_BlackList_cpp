@@ -17,10 +17,12 @@ add_executable(JWTRevoker_BlackList
         src/detail/BloomFilterScheduler/BloomFilterScheduler.h
         src/detail/ThirdPartyLibs/nlohmann/json.hpp
         src/detail/Utils/ThreadSafeQueue.hpp
-        src/detail/Network/NetworkUtils/NioTcpMsgSenderReceiver.hpp
-        src/detail/Network/MasterServerConnector/MasterServerHandler.hpp
+        src/detail/Network/NetworkUtils/NioTcpMsgBridge.hpp
+        src/detail/Network/MasterServerConnector.hpp
         src/detail/Utils/ConfigReader.hpp
         src/detail/BloomFilterScheduler/BloomFilterManager.hpp
+        src/detail/Network/NetworkUtils/MsgFormat.hpp
+        src/detail/Utils/StringConverter.hpp
 )
 
 # 链接 ws2_32 库

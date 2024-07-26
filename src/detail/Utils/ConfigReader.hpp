@@ -5,6 +5,7 @@
 #include <fstream>
 #include <string>
 #include <unordered_map>
+#include <map>
 
 // 函数用于去除字符串两端的空白字符
 inline std::string trim(const std::string& str) {
@@ -20,8 +21,8 @@ inline std::string trim(const std::string& str) {
 }
 
 // 定义一个函数来读取配置文件并将其存储在一个unordered_map中
-inline std::unordered_map<std::string, std::string> readConfig(const std::string& filename) {
-    std::unordered_map<std::string, std::string> config;
+inline std::map<std::string, std::string> readConfig(const std::string& filename) {
+    std::map<std::string, std::string> config;
 
     // 打开配置文件
     std::ifstream file(filename);

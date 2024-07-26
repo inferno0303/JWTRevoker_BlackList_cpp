@@ -10,25 +10,25 @@
 class BloomFilterEngine {
 private:
     // `MAX_JWT_LIFETIME`：Maximum validity period of the JWT (seconds)
-    time_t MAX_JWT_LIFETIME;
+    unsigned int MAX_JWT_LIFETIME;
 
     // `BLOOM_FILTER_ROTATION_TIME`：Cycle rotation speed of the Bloom filter (seconds)
-    time_t BLOOM_FILTER_ROTATION_TIME;
+    unsigned int BLOOM_FILTER_ROTATION_TIME;
 
     // `BLOOM_FILTER_SIZE`：The size of bloom filter
     size_t BLOOM_FILTER_SIZE;
 
-    // `NUM_HASH_FUNCTION`：The number of hash function
-    unsigned int NUM_HASH_FUNCTION;
+    // `HASH_FUNCTION_NUM`：The number of hash function
+    unsigned int HASH_FUNCTION_NUM;
 
-    // `NUM_BLOOM_FILTER`：Calculate the number of bloom filter
-    unsigned int NUM_BLOOM_FILTER;
+    // `BLOOM_FILTER_NUM`：Calculate the number of bloom filter
+    unsigned int BLOOM_FILTER_NUM;
 
     // 用于存储多个 BloomFilter 对象的向量
     std::vector<BF::BloomFilter> filters;
 
 public:
-    BloomFilterEngine(time_t maxJwtLifetime, time_t bloomFilterRotationTime, size_t bloomFilterSize,
+    BloomFilterEngine(unsigned int maxJwtLifetime, unsigned int bloomFilterRotationTime, size_t bloomFilterSize,
                       unsigned int numHashFunction);
 
     // 撤回JWT
@@ -43,10 +43,10 @@ public:
     // getter方法
     time_t getMAX_JWT_LIFETIME() const;
     time_t getBLOOM_FILTER_ROTATION_TIME() const;
-    unsigned int getNUM_BLOOM_FILTER() const;
-    std::vector<unsigned long long> getFILTERS_NUM_MSG() const;
+    unsigned int getBLOOM_FILTER_NUM() const;
+    std::vector<unsigned long long> getFILTERS_MSG_NUM() const;
     size_t getBLOOM_FILTER_SIZE() const;
-    unsigned int getNUM_HASH_FUNCTION() const;
+    unsigned int getHASH_FUNCTION_NUM() const;
 };
 
 #endif //BLOOMFILTER_ENGINE_H

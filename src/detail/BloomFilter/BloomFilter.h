@@ -13,7 +13,7 @@ namespace BF {
         std::vector<bool> bits;
 
         // 哈希函数的数量
-        unsigned int NUM_HASH_FUNCTION;
+        unsigned int HASH_FUNCTION_NUM;
 
         // 通过哈希函数计算数组下标
         std::vector<size_t> getHashIndices(const std::string &key) const;
@@ -22,7 +22,7 @@ namespace BF {
         static size_t hash_sha256(const std::string &key) ;
 
         // 布隆过滤器饱和度计数
-        unsigned long long NUM_MSG{0};
+        unsigned long long MSG_NUM{0};
 
     public:
         // 构造函数
@@ -35,7 +35,7 @@ namespace BF {
         bool contains(const std::string &key) const;
 
         // 获取布隆过滤器饱和度计数
-        unsigned long long getNUM_MSG() const;
+        unsigned long long getMSG_NUM() const;
     };
 
 } // namespace BF

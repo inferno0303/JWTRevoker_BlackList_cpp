@@ -1,5 +1,5 @@
-#ifndef NIO_TCP_MSG_SENDER_RECEIVER_HPP
-#define NIO_TCP_MSG_SENDER_RECEIVER_HPP
+#ifndef NIO_TCP_MSG_BRIDGE_HPP
+#define NIO_TCP_MSG_BRIDGE_HPP
 
 #include <iostream>
 #include <thread>
@@ -12,9 +12,9 @@
 #define BUFFER_SIZE 1024
 #define MSG_QUEUE_MAXSIZE 4096
 
-class NioTcpMsgSenderReceiver {
+class NioTcpMsgBridge {
 public:
-    explicit NioTcpMsgSenderReceiver(const SOCKET s) {
+    explicit NioTcpMsgBridge(const SOCKET s) {
         if (s == INVALID_SOCKET) {
             throw std::runtime_error("NIOSocketSenderReceiver initialization failed: invalid socket.");
         }
@@ -22,14 +22,14 @@ public:
 
         // 启动发送线程
         sendThreadRunFlag.store(true);
-        sendThread = std::thread(&NioTcpMsgSenderReceiver::sendMsgWorker, this);
+        sendThread = std::thread(&NioTcpMsgBridge::sendMsgWorker, this);
 
         // 启动接收线程
         recvThreadRunFlag.store(true);
-        recvThread = std::thread(&NioTcpMsgSenderReceiver::recvMsgWorker, this);
+        recvThread = std::thread(&NioTcpMsgBridge::recvMsgWorker, this);
     }
 
-    ~NioTcpMsgSenderReceiver() {
+    ~NioTcpMsgBridge() {
         // 在析构函数中停止所有线程
         sendThreadRunFlag.store(false);
         recvThreadRunFlag.store(false);
@@ -192,4 +192,4 @@ private:
     }
 };
 
-#endif // NIO_TCP_MSG_SENDER_RECEIVER_HPP
+#endif // NIO_TCP_MSG_BRIDGE_HPP

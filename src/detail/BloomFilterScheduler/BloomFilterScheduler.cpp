@@ -117,10 +117,10 @@ void BloomFilterScheduler::reportStatusWorker() const {
         _data["uid"] = "0001";
         _data["MAX_JWT_LIFETIME"] = bloomFilterEngine->getMAX_JWT_LIFETIME(); // T^max_i
         _data["BLOOM_FILTER_ROTATION_TIME"] = bloomFilterEngine->getBLOOM_FILTER_ROTATION_TIME(); // T^w_i
-        _data["NUM_BLOOM_FILTER"] = bloomFilterEngine->getNUM_BLOOM_FILTER(); // n^bf_i
-        _data["FILTERS_NUM_MSG"] = bloomFilterEngine->getFILTERS_NUM_MSG(); // n^jwt_(i-1,j)
+        _data["NUM_BLOOM_FILTER"] = bloomFilterEngine->getBLOOM_FILTER_NUM(); // n^bf_i
+        _data["FILTERS_NUM_MSG"] = bloomFilterEngine->getFILTERS_MSG_NUM(); // n^jwt_(i-1,j)
         _data["BLOOM_FILTER_SIZE"] = bloomFilterEngine->getBLOOM_FILTER_SIZE(); // m^bf_i
-        _data["NUM_HASH_FUNCTION"] = bloomFilterEngine->getNUM_HASH_FUNCTION(); // k^hash_i
+        _data["NUM_HASH_FUNCTION"] = bloomFilterEngine->getHASH_FUNCTION_NUM(); // k^hash_i
         std::string msg = R"({"event":"node_status_report","data":)" + _data.dump() + "}";
 
         // 发送数据
