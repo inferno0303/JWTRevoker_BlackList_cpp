@@ -14,10 +14,9 @@
 
 
 // 实现了与 master 服务器通信的逻辑
-class MasterServerConnector {
+class MasterServerConn {
 public:
-    MasterServerConnector(const char* server_ip, const unsigned short server_port) {
-
+    MasterServerConn(const char* server_ip, const unsigned short server_port) {
         // 连接 master 服务器
         this->server_socket = connectServer(server_ip, server_port);
 
@@ -32,9 +31,10 @@ public:
             throw std::runtime_error("Authenticate failed");
         }
 
+        std::cout << "Success connect to master server: " << server_ip << ":" << server_port << std::endl;
     }
 
-    ~MasterServerConnector() {
+    ~MasterServerConn() {
         // 在析构函数中清理资源
         nioTcpMsgBridge = nullptr;
     }
@@ -108,7 +108,6 @@ private:
         if (event == "auth_failed") return false;
         throw std::runtime_error("Cannot receive client authenticate reply");
     }
-
 };
 
 #endif // MASTER_SERVER_CONNECTOR_HPP

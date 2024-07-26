@@ -1,3 +1,10 @@
-# master server
+# connect to master server
 master_server_ip = 127.0.0.1
 master_server_port = 9999
+
+# listen
+client_service_ip = 127.0.0.1
+client_service_port = 9998
+
+# Node status report interval
+node_status_report_interval = 10

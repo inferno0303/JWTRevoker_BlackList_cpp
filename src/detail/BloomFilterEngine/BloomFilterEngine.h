@@ -1,11 +1,10 @@
-// BloomFilter.h
-#ifndef BLOOMFILTER_ENGINE_H
-#define BLOOMFILTER_ENGINE_H
+#ifndef BLOOM_FILTER_ENGINE_H
+#define BLOOM_FILTER_ENGINE_H
 
 #include <iostream>
 #include <vector>
 #include <string>
-#include "../BloomFilter/BloomFilter.h"
+#include "./BloomFilter/BloomFilter.h"
 
 class BloomFilterEngine {
 private:
@@ -32,10 +31,10 @@ public:
                       unsigned int numHashFunction);
 
     // 撤回JWT
-    void jwt_revoke(const std::string &jwt_token, time_t exp_time);
+    void jwt_revoke(const std::string& jwt_token, time_t exp_time);
 
     // 检查JWT
-    bool is_jwt_revoke(const std::string &jwt_token, time_t exp_time) const;
+    bool is_jwt_revoke(const std::string& jwt_token, time_t exp_time) const;
 
     // 轮换布隆过滤器
     void rotate_filters();
@@ -49,4 +48,4 @@ public:
     unsigned int getHASH_FUNCTION_NUM() const;
 };
 
-#endif //BLOOMFILTER_ENGINE_H
+#endif //BLOOM_FILTER_ENGINE_H
