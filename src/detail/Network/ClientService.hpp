@@ -109,10 +109,8 @@ private:
         // 需要添加停止逻辑
         std::thread processMsgThread([&nioTcpMsgBridge] {
             while (true) {
-                const char* newMsg = nioTcpMsgBridge.recvMsg();
-                std::cout << "[process] " << newMsg << " recvMsgQueue size: " << nioTcpMsgBridge.recvMsgQueueSize() <<
-                    std::endl;
-                delete[] newMsg;
+                std::string msg = nioTcpMsgBridge.recvMsg();
+                std::cout << "[process] " << msg << " recvMsgQueue size: " << nioTcpMsgBridge.recvMsgQueueSize() << std::endl;
             }
         });
         if (processMsgThread.joinable()) processMsgThread.join();

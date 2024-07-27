@@ -94,16 +94,15 @@ private:
         data["client_uid"] = "0001";
         data["token"] = "abcde";
         const std::string msg = doMsgAssembly(event, data);
-        nioTcpMsgBridge->sendMsg(msg.c_str());
+        nioTcpMsgBridge->asyncSendMsg(msg.c_str());
     }
 
     // 接收服务器的认证回复
     bool isAuthSuccess() const {
-        const char* msg = nioTcpMsgBridge->recvMsg();
+        const std::string msg = nioTcpMsgBridge->recvMsg();
         std::string event;
         std::map<std::string, std::string> data;
-        doMsgParse(std::string(msg), event, data);
-        delete[] msg;
+        doMsgParse(msg, event, data);
         if (event == "auth_success") return true;
         if (event == "auth_failed") return false;
         throw std::runtime_error("Cannot receive client authenticate reply");

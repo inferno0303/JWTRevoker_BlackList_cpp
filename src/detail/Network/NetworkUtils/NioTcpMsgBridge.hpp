@@ -35,40 +35,17 @@ public:
         recvThreadRunFlag.store(false);
         if (sendThread.joinable()) sendThread.join();
         if (recvThread.joinable()) recvThread.join();
-
-        // 在析构函数中释放所有队列元素的内存
-        while (!sendMsgQueue.empty()) {
-            const char* str = sendMsgQueue.dequeue();
-            delete[] str;
-        }
-        while (!recvMsgQueue.empty()) {
-            const char* str = recvMsgQueue.dequeue();
-            delete[] str;
-        }
     }
 
     // 将消息放入发送消息队列（生产者）
-    void sendMsg(const char* msg) {
-        // 分配内存
-        const auto newMsg = static_cast<char*>(std::malloc(std::strlen(msg) + 1));
-        if (newMsg) {
-            // 将内存的内容设置为 '\0'
-            std::memset(newMsg, '\0', std::strlen(msg) + 1);
-            // 复制字符串
-            std::strcpy(newMsg, msg);
-            // 添加到队列
-            sendMsgQueue.enqueue(newMsg);
-        } else {
-            throw std::runtime_error("Malloc memory faild.");
-        }
+    void asyncSendMsg(const std::string& msg) {
+        // 将字符串复制一份放到队列中
+        sendMsgQueue.enqueue(msg);
     }
 
     // 取出接收消息队列的消息（消费者）
-    const char* recvMsg() {
-        // 退队列头元素（如果队列为空，则阻塞，直到队列不为空）
-        const char* msg = recvMsgQueue.dequeue();
-        // 返回
-        return msg;
+    std::string recvMsg() {
+        return recvMsgQueue.dequeue();
     }
 
     // 发送消息队列长度
@@ -90,43 +67,40 @@ private:
     std::atomic<bool> sendThreadRunFlag{false};
 
     // 消息发送队列
-    ThreadSafeQueue<const char*> sendMsgQueue{MSG_QUEUE_MAXSIZE};
+    ThreadSafeQueue<std::string> sendMsgQueue{MSG_QUEUE_MAXSIZE};
 
     // 消息接收线程
     std::thread recvThread;
     std::atomic<bool> recvThreadRunFlag{false};
 
     // 消息接收队列
-    ThreadSafeQueue<const char*> recvMsgQueue{MSG_QUEUE_MAXSIZE};
+    ThreadSafeQueue<std::string> recvMsgQueue{MSG_QUEUE_MAXSIZE};
 
     // 取出发送消息队列的消息（消费者），并写入到套接字发送缓冲区
     void sendMsgWorker() {
         while (sendThreadRunFlag) {
             // 退队列头元素（如果队列为空，则阻塞，直到队列不为空）
-            const char* const msg = sendMsgQueue.dequeue();
+            const std::string msg = sendMsgQueue.dequeue();
 
             // 1、构造消息头
-            auto msgLengthBE = htonl(strlen(msg)); // 转换为大端序
+            auto msgLengthBE = htonl(msg.length()); // 转换为大端序
             // 2、构造消息帧
-            char msgFrame[4 + strlen(msg) + 1]{};
+            char msgFrame[4 + msg.length() + 1]{};
             // 3、复制消息头到消息帧的前4个字节
             std::memcpy(msgFrame, &msgLengthBE, 4);
             // 4、复制消息体到消息帧，跳过前4个字节
-            std::memcpy(msgFrame + 4, msg, strlen(msg));
+            std::memcpy(msgFrame + 4, msg.c_str(), msg.length());
 
-            // 将待发送的信息写入到套接字的发送缓冲区中
-            size_t sent = 0;
-            while (sent < 4 + strlen(msg)) {
-                const int bytesSent = send(socket, msgFrame, static_cast<int>(4 + strlen(msg) - sent), 0);
+            // 将消息帧写入到套接字的发送缓冲区
+            size_t totalSent = 0;
+            while (totalSent < 4 + msg.length()) {
+                const int bytesSent = send(socket, msgFrame, static_cast<int>(4 + msg.length() - totalSent), 0);
                 if (bytesSent == SOCKET_ERROR) {
                     std::cerr << "Send failed with error: " << WSAGetLastError() << std::endl;
                     return;
                 }
-                sent += bytesSent;
+                totalSent += bytesSent;
             }
-
-            // 清理
-            delete[] msg;
         }
     }
 
@@ -139,25 +113,19 @@ private:
             int totalReceived = 0;
             while (totalReceived < 4) {
                 int bytesReceived = 0;
-                try {
-                    bytesReceived = recv(socket, msgHeaderBE + totalReceived, 4 - totalReceived, 0);
-                    if (bytesReceived == SOCKET_ERROR) {
-                        std::cerr << "Recv failed with error: " << WSAGetLastError() << std::endl;
-                        return;
-                    }
-                    if (bytesReceived == 0) {
-                        std::cerr << "Connection closed by the peer." << std::endl;
-                        return;
-                    }
-                } catch (std::exception& e) {
-                    std::cerr << "Socket recv error: " << e.what() << std::endl;
-                    throw std::runtime_error("Socket recv error.");
+                bytesReceived = recv(socket, msgHeaderBE + totalReceived, 4 - totalReceived, 0);
+                if (bytesReceived == SOCKET_ERROR) {
+                    std::cerr << "Recv failed with error: " << WSAGetLastError() << std::endl;
+                    return;
+                }
+                if (bytesReceived == 0) {
+                    std::cerr << "Connection closed by the peer." << std::endl;
+                    return;
                 }
                 totalReceived += bytesReceived;
             }
 
-            // 2、转换为小端序
-            // const unsigned int msgBodyLength = ntohl(*reinterpret_cast<const unsigned int*>(msgHeaderBE)); // 这样做可能会导致字节对齐问题
+            // 2、将消息头转换为小端序
             unsigned int msgBodyLength = 0;
             std::memcpy(&msgBodyLength, msgHeaderBE, 4);
             msgBodyLength = ntohl(msgBodyLength);
@@ -167,38 +135,20 @@ private:
             totalReceived = 0;
             while (totalReceived < msgBodyLength) {
                 int bytesReceived = 0;
-                try {
-                    bytesReceived = recv(socket, msgBody + totalReceived,
-                                         static_cast<int>(msgBodyLength) - totalReceived, 0);
-                    if (bytesReceived == SOCKET_ERROR) {
-                        std::cerr << "Recv failed with error: " << WSAGetLastError() << std::endl;
-                        return;
-                    }
-                    if (bytesReceived == 0) {
-                        std::cerr << "Connection closed by the peer." << std::endl;
-                        return;
-                    }
-                } catch (std::exception& e) {
-                    std::cerr << "Socket recv error: " << e.what() << std::endl;
-                    throw std::runtime_error("Socket recv error.");
+                bytesReceived = recv(socket, msgBody + totalReceived,
+                                     static_cast<int>(msgBodyLength) - totalReceived, 0);
+                if (bytesReceived == SOCKET_ERROR) {
+                    std::cerr << "Recv failed with error: " << WSAGetLastError() << std::endl;
+                    return;
+                }
+                if (bytesReceived == 0) {
+                    std::cerr << "Connection closed by the peer." << std::endl;
+                    return;
                 }
                 totalReceived += bytesReceived;
             }
-
-            std::cout << "[received] " <<msgBody << std::endl;
-
-            // 分配内存
-            const auto recvMsg = static_cast<char*>(std::malloc(msgBodyLength + 1));
-            if (recvMsg) {
-                // 将内存的内容设置为 '\0'
-                std::memset(recvMsg, '\0', msgBodyLength + 1);
-                // 复制字符串
-                std::strcpy(recvMsg, msgBody);
-                // 添加到队列
-                recvMsgQueue.enqueue(recvMsg);
-            } else {
-                throw std::runtime_error("Malloc memory faild.");
-            }
+            std::cout << "[received] " << msgBody << std::endl;
+            recvMsgQueue.enqueue(std::string(msgBody));
         }
     }
 };

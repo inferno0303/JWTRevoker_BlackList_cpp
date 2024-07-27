@@ -9,7 +9,7 @@
 
 #include "../Network/NetworkUtils/MsgFormat.hpp"
 #include "../Network/NetworkUtils/NioTcpMsgBridge.hpp"
-#include "../BloomFilterEngine/BloomFilterEngine.h"
+#include "../BlackListEngine/BlackListEngine.hpp"
 #include "../Utils/StringConverter.hpp"
 
 class BloomFilterManager {
@@ -32,9 +32,9 @@ public:
 
         std::cout << "Allocation bloom filter memory..." << std::endl;
 
-        // 布隆过滤器初始化，分配内存
+        // 黑名单初始化，分配内存
         try {
-            this->bloomFilterEngine = std::make_shared<BloomFilterEngine>(
+            this->blackListEngine = std::make_shared<BlackListEngine>(
                 stringToUInt(maxJwtLifeTime),
                 stringToUInt(bloomFilterRotationTime),
                 stringToSizeT(bloomFilterSize),
@@ -49,16 +49,16 @@ public:
             throw std::runtime_error("Memory allocation failed!");
         }
 
-        // 启动周期轮换线程
-        if (!cycleRotationThread.joinable()) {
-            cycleRotationThreadRunFlag.store(true);
-            cycleRotationThread = std::thread(&BloomFilterManager::cycleRotationWorker, this);
-        }
-
         // 启动节点状态上报线程
         if (!nodeStatusReportThread.joinable()) {
             nodeStatusReportThreadRunFlag.store(true);
             nodeStatusReportThread = std::thread(&BloomFilterManager::nodeStatusReportWorker, this);
+        }
+
+        // 启动发送心跳包线程
+        if (!keepaliveThread.joinable()) {
+            keepaliveThreadRunFlag.store(true);
+            keepaliveThread = std::thread(&BloomFilterManager::keepaliveWorker, this);
         }
     }
 
@@ -69,16 +69,16 @@ public:
             processMsgThread.join();
         }
 
-        // 停止周期轮换线程
-        cycleRotationThreadRunFlag.store(false);
-        if (cycleRotationThread.joinable()) {
-            cycleRotationThread.join();
-        }
-
         // 停止节点状态上报线程
         nodeStatusReportThreadRunFlag.store(false);
         if (nodeStatusReportThread.joinable()) {
             nodeStatusReportThread.join();
+        }
+
+        // 停止发送心跳包线程
+        keepaliveThreadRunFlag.store(false);
+        if (keepaliveThread.joinable()) {
+            keepaliveThread.join();
         }
     };
 
@@ -90,10 +90,21 @@ private:
     std::map<std::string, std::string> startupConfig;
 
     // 布隆过滤器指针
-    std::shared_ptr<BloomFilterEngine> bloomFilterEngine{};
+    std::shared_ptr<BlackListEngine> blackListEngine{};
 
-    // 异步事件
+    // 发送 get_bloom_filter_default_config 消息，查询布隆过滤器默认配置
     std::promise<std::map<std::string, std::string>> getBFDefaultConfigPromise;
+
+    std::map<std::string, std::string> awaitBFDefaultConfig() {
+        const std::string event = "get_bloom_filter_default_config";
+        std::map<std::string, std::string> data;
+        data["client_uid"] = "0001";
+        const std::string msg = doMsgAssembly(event, data);
+        masterServerMsgBridge->asyncSendMsg(msg.c_str());
+
+        // 等待回应
+        return getBFDefaultConfigPromise.get_future().get();
+    }
 
     // 处理消息线程
     std::atomic<bool> processMsgThreadRunFlag{false};
@@ -102,60 +113,17 @@ private:
     void processMsgWorker() {
         while (processMsgThreadRunFlag) {
             // 从队列中接收消息（队列空则阻塞）
-            const char* msg = masterServerMsgBridge->recvMsg();
+            const std::string msg = masterServerMsgBridge->recvMsg();
             std::string event;
             std::map<std::string, std::string> data;
-            doMsgParse(std::string(msg), event, data);
-            delete[] msg;
+            doMsgParse(msg, event, data);
 
-            // 处理这些事件
-            if (event == "ping_from_server") {
-                auto future = std::async(std::launch::async, &BloomFilterManager::replyPongFromClient, this);
-                continue;
-            }
+            // 处理事件
             if (event == "bloom_filter_default_config") {
                 this->getBFDefaultConfigPromise.set_value(data);
                 continue;
             }
             std::cout << "Unknow event: " << event << std::endl;
-        }
-    }
-
-    // 发送 get_bloom_filter_default_config 消息，查询布隆过滤器默认配置
-    std::map<std::string, std::string> awaitBFDefaultConfig() {
-        const std::string event = "get_bloom_filter_default_config";
-        std::map<std::string, std::string> data;
-        data["client_uid"] = "0001";
-        const std::string msg = doMsgAssembly(event, data);
-        masterServerMsgBridge->sendMsg(msg.c_str());
-
-        // 等待回应
-        return getBFDefaultConfigPromise.get_future().get();
-    }
-
-    // 发送 pong_from_client 消息
-    void replyPongFromClient() const {
-        const std::string event = "pong_from_client";
-        std::map<std::string, std::string> data;
-        data["client_uid"] = "0001";
-        const std::string msg = doMsgAssembly(event, data);
-        masterServerMsgBridge->sendMsg(msg.c_str());
-    }
-
-    // 周期轮换线程
-    std::atomic<bool> cycleRotationThreadRunFlag{false};
-    std::thread cycleRotationThread;
-
-    void cycleRotationWorker() const {
-        while (cycleRotationThreadRunFlag.load()) {
-            // 根据轮换时间间隔，实现周期轮换
-            const time_t t = bloomFilterEngine->getBLOOM_FILTER_ROTATION_TIME();
-            std::this_thread::sleep_for(std::chrono::seconds(t));
-            if (cycleRotationThreadRunFlag.load()) {
-                // 调用 BloomFilterEngine 的方法进行周期轮换
-                bloomFilterEngine->rotate_filters();
-                std::cout << "Cycle Rotation! time:" << time(nullptr) << std::endl;
-            }
         }
     }
 
@@ -173,16 +141,32 @@ private:
 
             // 收集节点状态
             data["client_uid"] = "0001";
-            data["max_jwt_life_time"] = std::to_string(bloomFilterEngine->getMAX_JWT_LIFETIME()); // T^max_i
-            data["bloom_filter_rotation_time"] = std::to_string(bloomFilterEngine->getBLOOM_FILTER_ROTATION_TIME());
-            // T^w_i
-            data["bloom_filter_num"] = std::to_string(bloomFilterEngine->getBLOOM_FILTER_NUM()); // n^bf_i
-            data["filters_msg_num"] = vectorToString(bloomFilterEngine->getFILTERS_MSG_NUM()); // n^jwt_(i-1,j)
-            data["bloom_filter_size"] = std::to_string(bloomFilterEngine->getBLOOM_FILTER_SIZE()); // m^bf_i
-            data["hash_function_num"] = std::to_string(bloomFilterEngine->getHASH_FUNCTION_NUM()); // k^hash_i
+            data["max_jwt_life_time"] = std::to_string(blackListEngine->getMaxJwtLifeTime()); // T^max_i
+            data["rotation_interval"] = std::to_string(blackListEngine->getRotationInterval()); // T^w_i
+            data["bloom_filter_num"] = std::to_string(blackListEngine->getBloomFilterNum()); // n^bf_i
+            data["black_list_msg_num"] = vectorToString(blackListEngine->getBlackListMsgNum()); // n^jwt_(i-1,j)
+            data["bloom_filter_size"] = std::to_string(blackListEngine->getBloomFilterSize()); // m^bf_i
+            data["hash_function_num"] = std::to_string(blackListEngine->getHashFunctionNum()); // k^hash_i
 
             const std::string msg = doMsgAssembly(event, data);
-            masterServerMsgBridge->sendMsg(msg.c_str());
+            masterServerMsgBridge->asyncSendMsg(msg.c_str());
+        }
+    }
+
+    // 发送心跳包线程
+    std::atomic<bool> keepaliveThreadRunFlag{false};
+    std::thread keepaliveThread;
+
+    void keepaliveWorker() {
+        const unsigned int interval = stringToUInt(startupConfig["keepalive_interval"]);
+        while (keepaliveThreadRunFlag) {
+            std::this_thread::sleep_for(std::chrono::seconds(interval));
+
+            const std::string event = "keepalive";
+            std::map<std::string, std::string> data;
+            data["client_uid"] = "0001";
+            const std::string msg = doMsgAssembly(event, data);
+            masterServerMsgBridge->asyncSendMsg(msg.c_str());
         }
     }
 };

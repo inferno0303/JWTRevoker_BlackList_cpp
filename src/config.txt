@@ -6,5 +6,8 @@ master_server_port = 9999
 client_service_ip = 127.0.0.1
 client_service_port = 9998
 
+# keepalive_interval
+keepalive_interval = 5
+
 # Node status report interval
 node_status_report_interval = 10

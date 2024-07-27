@@ -41,7 +41,7 @@ inline size_t stringToSizeT(const std::string& str) {
     }
 }
 
-inline std::string vectorToString(const std::vector<unsigned long long>& vec) {
+inline std::string vectorToString(const std::vector<unsigned long>& vec) {
     std::string result = "[";
 
     for (size_t i = 0; i < vec.size(); ++i) {
