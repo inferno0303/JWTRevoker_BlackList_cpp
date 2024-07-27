@@ -14,8 +14,8 @@
 
 class BloomFilterManager {
 public:
-    explicit BloomFilterManager(NioTcpMsgBridge* nio_, const std::map<std::string, std::string>& config_) :
-        masterServerMsgBridge(nio_), startupConfig(config_) {
+    explicit BloomFilterManager(NioTcpMsgBridge& bridge, const std::map<std::string, std::string>& config) :
+        masterMsgBridge(bridge), startupConfig(config) {
         // 启动处理消息线程
         if (!processMsgThread.joinable()) {
             processMsgThreadRunFlag.store(true);
@@ -23,12 +23,12 @@ public:
         }
 
         // 发送 get_bloom_filter_default_config 消息，阻塞等待回应
-        std::map<std::string, std::string> config = this->awaitBFDefaultConfig(); // 阻塞并等待一个async函数返回结果
+        std::map<std::string, std::string> bfConfig = this->awaitBFDefaultConfig(); // 阻塞并等待一个async函数返回结果
 
-        const std::string maxJwtLifeTime = config["max_jwt_life_time"];
-        const std::string bloomFilterRotationTime = config["bloom_filter_rotation_time"];
-        const std::string bloomFilterSize = config["bloom_filter_size"];
-        const std::string numHashFunction = config["num_hash_function"];
+        const std::string maxJwtLifeTime = bfConfig["max_jwt_life_time"];
+        const std::string bloomFilterRotationTime = bfConfig["bloom_filter_rotation_time"];
+        const std::string bloomFilterSize = bfConfig["bloom_filter_size"];
+        const std::string numHashFunction = bfConfig["num_hash_function"];
 
         std::cout << "Allocation bloom filter memory..." << std::endl;
 
@@ -54,12 +54,6 @@ public:
             nodeStatusReportThreadRunFlag.store(true);
             nodeStatusReportThread = std::thread(&BloomFilterManager::nodeStatusReportWorker, this);
         }
-
-        // 启动发送心跳包线程
-        if (!keepaliveThread.joinable()) {
-            keepaliveThreadRunFlag.store(true);
-            keepaliveThread = std::thread(&BloomFilterManager::keepaliveWorker, this);
-        }
     }
 
     ~BloomFilterManager() {
@@ -74,17 +68,11 @@ public:
         if (nodeStatusReportThread.joinable()) {
             nodeStatusReportThread.join();
         }
-
-        // 停止发送心跳包线程
-        keepaliveThreadRunFlag.store(false);
-        if (keepaliveThread.joinable()) {
-            keepaliveThread.join();
-        }
     };
 
 private:
     // 与 master 服务器的消息桥
-    NioTcpMsgBridge* masterServerMsgBridge{};
+    NioTcpMsgBridge& masterMsgBridge;
 
     // 程序启动配置
     std::map<std::string, std::string> startupConfig;
@@ -100,7 +88,7 @@ private:
         std::map<std::string, std::string> data;
         data["client_uid"] = "0001";
         const std::string msg = doMsgAssembly(event, data);
-        masterServerMsgBridge->asyncSendMsg(msg.c_str());
+        masterMsgBridge.asyncSendMsg(msg);
 
         // 等待回应
         return getBFDefaultConfigPromise.get_future().get();
@@ -113,7 +101,7 @@ private:
     void processMsgWorker() {
         while (processMsgThreadRunFlag) {
             // 从队列中接收消息（队列空则阻塞）
-            const std::string msg = masterServerMsgBridge->recvMsg();
+            const std::string msg = masterMsgBridge.recvMsg();
             std::string event;
             std::map<std::string, std::string> data;
             doMsgParse(msg, event, data);
@@ -149,24 +137,7 @@ private:
             data["hash_function_num"] = std::to_string(blackListEngine->getHashFunctionNum()); // k^hash_i
 
             const std::string msg = doMsgAssembly(event, data);
-            masterServerMsgBridge->asyncSendMsg(msg.c_str());
-        }
-    }
-
-    // 发送心跳包线程
-    std::atomic<bool> keepaliveThreadRunFlag{false};
-    std::thread keepaliveThread;
-
-    void keepaliveWorker() {
-        const unsigned int interval = stringToUInt(startupConfig["keepalive_interval"]);
-        while (keepaliveThreadRunFlag) {
-            std::this_thread::sleep_for(std::chrono::seconds(interval));
-
-            const std::string event = "keepalive";
-            std::map<std::string, std::string> data;
-            data["client_uid"] = "0001";
-            const std::string msg = doMsgAssembly(event, data);
-            masterServerMsgBridge->asyncSendMsg(msg.c_str());
+            masterMsgBridge.asyncSendMsg(msg);
         }
     }
 };

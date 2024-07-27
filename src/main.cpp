@@ -18,17 +18,16 @@ int main() {
     // 读取启动参数
     const std::string master_server_ip = startupConfig["master_server_ip"];
     const std::string master_server_port = startupConfig["master_server_port"];
+    const std::string keepalive_interval = startupConfig["keepalive_interval"];
     const std::string client_service_ip = startupConfig["client_service_ip"];
     const std::string client_service_port = startupConfig["client_service_port"];
 
-    // 连接到控制面服务器
-    const MasterServerConn masterServerConn{master_server_ip.c_str(), stringToUShort(master_server_port)};
-
-    // 控制面消息桥
-    NioTcpMsgBridge* nioTcpMsgBridge = masterServerConn.getNioTcpMsgBridge();
+    // 连接到 master 服务器
+    const MasterServerConn masterServerConn(master_server_ip, stringToUShort(master_server_port),
+                                            stringToUInt(keepalive_interval));
 
     // 初始化布隆过滤器
-    BloomFilterManager bloomFilterManager(nioTcpMsgBridge, startupConfig);
+    BloomFilterManager bloomFilterManager(masterServerConn.getMsgBridge(), startupConfig);
 
     // 监听客户端
     ClientService clientService(client_service_ip.c_str(), stringToUShort(client_service_port));

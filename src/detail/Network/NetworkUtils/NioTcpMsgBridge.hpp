@@ -14,7 +14,7 @@
 
 class NioTcpMsgBridge {
 public:
-    explicit NioTcpMsgBridge(const SOCKET s) {
+    explicit NioTcpMsgBridge(const SOCKET s, std::condition_variable& cv) : onSocketErrCv(cv) {
         if (s == INVALID_SOCKET) {
             throw std::runtime_error("NIOSocketSenderReceiver initialization failed: invalid socket.");
         }
@@ -58,9 +58,20 @@ public:
         return recvMsgQueue.size();
     }
 
+    // 停止工作
+    void stop() {
+        sendThreadRunFlag.store(false);
+        recvThreadRunFlag.store(false);
+        if (sendThread.joinable()) sendThread.join();
+        if (recvThread.joinable()) recvThread.join();
+    }
+
 private:
     // 目标套接字
     SOCKET socket = INVALID_SOCKET;
+
+    // 套接字错误时通知的条件变量
+    std::condition_variable& onSocketErrCv;
 
     // 消息发送线程
     std::thread sendThread;
@@ -78,7 +89,7 @@ private:
 
     // 取出发送消息队列的消息（消费者），并写入到套接字发送缓冲区
     void sendMsgWorker() {
-        while (sendThreadRunFlag) {
+        while (sendThreadRunFlag.load()) {
             // 退队列头元素（如果队列为空，则阻塞，直到队列不为空）
             const std::string msg = sendMsgQueue.dequeue();
 
@@ -97,6 +108,7 @@ private:
                 const int bytesSent = send(socket, msgFrame, static_cast<int>(4 + msg.length() - totalSent), 0);
                 if (bytesSent == SOCKET_ERROR) {
                     std::cerr << "Send failed with error: " << WSAGetLastError() << std::endl;
+                    onSocketErr();
                     return;
                 }
                 totalSent += bytesSent;
@@ -107,7 +119,7 @@ private:
     // 取出套接字缓冲区的内容，放入接收消息队列（生产者）
     void recvMsgWorker() {
         // 从套接字的接收缓冲区中获取信息
-        while (recvThreadRunFlag) {
+        while (recvThreadRunFlag.load()) {
             // 1、读数据头
             char msgHeaderBE[4]{};
             int totalReceived = 0;
@@ -116,10 +128,12 @@ private:
                 bytesReceived = recv(socket, msgHeaderBE + totalReceived, 4 - totalReceived, 0);
                 if (bytesReceived == SOCKET_ERROR) {
                     std::cerr << "Recv failed with error: " << WSAGetLastError() << std::endl;
+                    onSocketErr();
                     return;
                 }
                 if (bytesReceived == 0) {
                     std::cerr << "Connection closed by the peer." << std::endl;
+                    onSocketErr();
                     return;
                 }
                 totalReceived += bytesReceived;
@@ -149,6 +163,18 @@ private:
             }
             std::cout << "[received] " << msgBody << std::endl;
             recvMsgQueue.enqueue(std::string(msgBody));
+        }
+    }
+
+    void onSocketErr() {
+        if (sendThreadRunFlag.load() || recvThreadRunFlag.load()) {
+            // 停止线程
+            sendThreadRunFlag.store(false);
+            recvThreadRunFlag.store(false);
+            std::cout << "Socket error event.\n";
+
+            // 通知外部
+            onSocketErrCv.notify_all();
         }
     }
 };

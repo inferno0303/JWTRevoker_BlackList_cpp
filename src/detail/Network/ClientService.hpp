@@ -17,7 +17,7 @@ public:
         // 启动服务器监听线程
         if (!serverThread.joinable()) {
             serverThreadRunFlag.store(true);
-            serverThread = std::thread(&ClientService::serverWorker, "127.0.0.1", 9998);
+            serverThread = std::thread(&ClientService::listenWorker, "127.0.0.1", 9998);
         }
     }
 
@@ -39,7 +39,7 @@ private:
     std::atomic<bool> serverThreadRunFlag{false};
     std::thread serverThread;
 
-    static void serverWorker(const char* ip, const unsigned short port) {
+    static void listenWorker(const std::string& ip, const unsigned short& port) {
         WSADATA wsaData{};
         auto serverSocket = INVALID_SOCKET;
         sockaddr_in address = {};
@@ -58,7 +58,7 @@ private:
 
         // 设置地址和端口
         address.sin_family = AF_INET;
-        if (inet_pton(AF_INET, ip, &address.sin_addr) <= 0) {
+        if (inet_pton(AF_INET, ip.c_str(), &address.sin_addr) <= 0) {
             closesocket(serverSocket);
             WSACleanup();
             throw std::runtime_error("Invalid address/ Address not supported: " + std::string(ip));
@@ -102,15 +102,16 @@ private:
 
     // 处理客户端线程
     static void handleClientWorker(const SOCKET clientSocket) {
+        std::condition_variable onSocketErrCv;
         // 创建 NIO 对象
-        NioTcpMsgBridge nioTcpMsgBridge(clientSocket);
+        NioTcpMsgBridge msgBridge(clientSocket, onSocketErrCv);
 
         // 接收数据线程，模拟处理数据较慢的情况
         // 需要添加停止逻辑
-        std::thread processMsgThread([&nioTcpMsgBridge] {
+        std::thread processMsgThread([&msgBridge] {
             while (true) {
-                std::string msg = nioTcpMsgBridge.recvMsg();
-                std::cout << "[process] " << msg << " recvMsgQueue size: " << nioTcpMsgBridge.recvMsgQueueSize() << std::endl;
+                std::string msg = msgBridge.recvMsg();
+                std::cout << "[process] " << msg << " recvMsgQueue size: " << msgBridge.recvMsgQueueSize() << std::endl;
             }
         });
         if (processMsgThread.joinable()) processMsgThread.join();
