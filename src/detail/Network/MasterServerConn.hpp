@@ -13,6 +13,8 @@
 #include "NetworkUtils/NioTcpMsgBridge.hpp"
 #include "../ThirdPartyLibs/nlohmann/json.hpp"
 
+#define MSG_QUEUE_MAXSIZE 4096
+
 
 // 实现了与 master 服务器通信的逻辑
 class MasterServerConn {
@@ -30,10 +32,10 @@ public:
         std::cout << "Success connect to master server: " << ip << ":" << port << std::endl;
 
         // 启动重新连接线程
-        if (!reconnectThread.joinable()) {
-            reconnectThreadRunFlag.store(true);
-            reconnectThread = std::thread(&MasterServerConn::reconnectWorker, this);
-        }
+        // if (!reconnectThread.joinable()) {
+        //     reconnectThreadRunFlag.store(true);
+        //     reconnectThread = std::thread(&MasterServerConn::reconnectWorker, this);
+        // }
 
         // 启动发送心跳包线程
         if (!keepaliveThread.joinable()) {
@@ -64,9 +66,19 @@ private:
     const std::string& ip;
     const unsigned short& port;
     SOCKET serverSocket = INVALID_SOCKET;
+
+    // 消息发送队列
+    ThreadSafeQueue<std::string> sendMsgQueue{MSG_QUEUE_MAXSIZE};
+
+    // 消息接收队列
+    ThreadSafeQueue<std::string> recvMsgQueue{MSG_QUEUE_MAXSIZE};
+
+    // 消息桥
     std::unique_ptr<NioTcpMsgBridge> msgBridge = nullptr;
 
+    // socket错误通知
     std::condition_variable onSocketErrCv;
+
     unsigned int keepaliveInterval = 0;
 
     // 连接到 master 并验证身份
@@ -81,7 +93,13 @@ private:
                 std::this_thread::sleep_for(std::chrono::seconds(5));
             }
         }
-        msgBridge = std::unique_ptr<NioTcpMsgBridge>(new NioTcpMsgBridge(serverSocket, onSocketErrCv));
+        if (msgBridge != nullptr) {
+            msgBridge->stop();
+            msgBridge.reset();
+        }
+        msgBridge = std::unique_ptr<NioTcpMsgBridge>(
+            new NioTcpMsgBridge(serverSocket, sendMsgQueue, recvMsgQueue, onSocketErrCv)
+        );
     }
 
     // 重新连接线程
@@ -95,8 +113,6 @@ private:
             onSocketErrCv.wait(lock);
 
             std::cout << "Reconnect to master server..." << std::endl;
-            msgBridge->stop();
-            msgBridge.reset();
             tryToConnectMaster();
             if (!tryAuth()) {
                 throw std::runtime_error("Authenticate failed");

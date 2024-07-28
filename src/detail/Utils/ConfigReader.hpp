@@ -20,7 +20,6 @@ inline std::string trim(const std::string& str) {
     return result;
 }
 
-// 定义一个函数来读取配置文件并将其存储在一个unordered_map中
 inline std::map<std::string, std::string> readConfig(const std::string& filename) {
     std::map<std::string, std::string> config;
 

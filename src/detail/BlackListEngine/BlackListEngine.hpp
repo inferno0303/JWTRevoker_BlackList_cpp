@@ -8,10 +8,16 @@
 #include <string>
 #include <chrono>
 #include <condition_variable>
+#include <future>
 #include <mutex>
+#include <sstream>
 #include <thread>
 
+#include "../Utils/ConfigReader.hpp"
 #include "BaseBloomFilter.hpp"
+#include "../Utils/ThreadSafeQueue.hpp"
+
+#define CONFIG_FILE_PATH "C:\\Projects\\JWTRevoker_BlackList_cpp\\src\\config.txt"
 
 class BlackListEngine {
 public:
@@ -39,8 +45,12 @@ public:
         // 计算所需布隆过滤器的个数
         this->bloomFilterNum = std::ceil(this->maxJwtLifeTime / this->rotationInterval);
 
+        // 读取配置文件
+        std::map<std::string, std::string> config = readConfig(CONFIG_FILE_PATH);
+        this->presistFilePath = config["persistent_file_path"];
+
         // 初始化黑名单
-        this->blackList = initBlackList(this->bloomFilterNum, this->bloomFilterSize, this->hashFunctionNum);
+        this->blackList = initialBlackList(this->bloomFilterNum, this->bloomFilterSize, this->hashFunctionNum);
 
         // 启动周期轮换线程
         if (!rotateBloomFilterThread.joinable()) {
@@ -58,8 +68,8 @@ public:
     }
 
     // 初始化黑名单
-    std::vector<BaseBloomFilter> initBlackList(const unsigned int blackListSize, const unsigned int bloomFilterSize,
-                                               const unsigned int hashFunctionNum) const {
+    std::vector<BaseBloomFilter> initialBlackList(const unsigned int& blackListSize, const unsigned int& bloomFilterSize,
+                                               const unsigned int& hashFunctionNum) const {
         // 创建新的黑名单
         std::vector<BaseBloomFilter> newBlackList;
 
@@ -75,7 +85,7 @@ public:
     }
 
     // 写入黑名单
-    void write(const std::string& token, const time_t expTime) {
+    void write(const std::string& token, const time_t& expTime) {
         // 计算这个 token 还剩多长时间过期
         const auto now_c = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
         const time_t remainingTime = expTime - now_c;
@@ -94,10 +104,15 @@ public:
         for (unsigned int i = 0; i < num; ++i) {
             blackList[i].add(token);
         }
+
+        // 异步写文件
+        std::ostringstream oss;
+        oss << token << "," << expTime;
+        auto future = std::async(std::launch::async, &BlackListEngine::writeToFile, this, oss.str());
     }
 
     // 查询是否在黑名单中
-    bool contain(const std::string& token, const time_t expTime) const {
+    bool contain(const std::string& token, const time_t& expTime) const {
         // 计算这个 token 还剩多长时间过期
         const auto now_c = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
         const time_t remainingTime = expTime - now_c;
@@ -185,13 +200,32 @@ private:
     // 周期轮换间隔
     unsigned long rotationInterval = 0;
     std::promise<unsigned int> rotationIntervalProm;
-    std::future<unsigned int> rotationIntervalfut = rotationIntervalProm.get_future();
+
+    // 持久化到文件
+    ThreadSafeQueue<std::string> logToFileQueue;
+    std::string presistFilePath;
+
+    void writeToFile(const std::string& message) const {
+        const auto now_c = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
+        std::tm* tm = std::localtime(&now_c);
+        tm->tm_min = 0; // 将分钟设为0
+        tm->tm_sec = 0; // 将秒钟设为0
+        auto hourlyTimestamp = std::mktime(tm);
+        std::ostringstream filename_oss;
+        filename_oss << presistFilePath << hourlyTimestamp << ".txt";
+
+        std::ofstream logFile(filename_oss.str(), std::ios::app);
+        if (logFile.is_open()) {
+            logFile << message << std::endl;
+        }
+    }
 
     // 周期轮换线程
     std::atomic<bool> rotateBloomFilterThreadRunFlag{false};
     std::thread rotateBloomFilterThread;
 
     void rotateBloomFilterWorker() {
+        std::future<unsigned int> rotationIntervalfut = rotationIntervalProm.get_future();
         while (rotateBloomFilterThreadRunFlag) {
             const std::future_status status = rotationIntervalfut.wait_for(std::chrono::seconds(rotationInterval));
             // 布隆过滤器被重建了
@@ -204,7 +238,11 @@ private:
                 blackList.erase(blackList.begin());
                 blackList.emplace_back(bloomFilterSize, hashFunctionNum);
                 const auto now_c = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
-                std::cout << "Rotate bloom filter at time: " << now_c << ", black list memory used: " << bloomFilterNum * bloomFilterSize / 8 / 1024 / 1024 << "MBytes" << std::endl;
+                std::cout << "Rotate bloom filter at time: " << now_c << ", black list memory used: " << bloomFilterNum
+                    * bloomFilterSize / 8 / 1024 / 1024 << "MBytes" << std::endl;
+                std::ostringstream oss;
+                oss << "Rotate bloom filter at time: " << now_c << ", black list memory used: " << bloomFilterNum *
+                    bloomFilterSize / 8 / 1024 / 1024 << "MBytes";
             }
         }
     }

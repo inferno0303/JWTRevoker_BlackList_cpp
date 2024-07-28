@@ -10,15 +10,43 @@
 #include "../../Utils/ThreadSafeQueue.hpp"
 
 #define BUFFER_SIZE 1024
-#define MSG_QUEUE_MAXSIZE 4096
+
+
+// 定义ANSI颜色代码
+#define RESET       "\033[0m"
+#define BLACK       "\033[30m"      /* Black */
+#define RED         "\033[31m"      /* Red */
+#define GREEN       "\033[32m"      /* Green */
+#define YELLOW      "\033[33m"      /* Yellow */
+#define BLUE        "\033[34m"      /* Blue */
+#define MAGENTA     "\033[35m"      /* Magenta */
+#define CYAN        "\033[36m"      /* Cyan */
+#define WHITE       "\033[37m"      /* White */
+
+#ifdef _WIN32
+#include <windows.h>
+
+inline void enableVirtualTerminalProcessing() {
+    HANDLE hOut = GetStdHandle(STD_OUTPUT_HANDLE);
+    DWORD dwMode = 0;
+    GetConsoleMode(hOut, &dwMode);
+    dwMode |= ENABLE_VIRTUAL_TERMINAL_PROCESSING;
+    SetConsoleMode(hOut, dwMode);
+}
+#endif
 
 class NioTcpMsgBridge {
 public:
-    explicit NioTcpMsgBridge(const SOCKET s, std::condition_variable& cv) : onSocketErrCv(cv) {
+    explicit NioTcpMsgBridge(const SOCKET s, ThreadSafeQueue<std::string>& sq, ThreadSafeQueue<std::string>& rq,
+                             std::condition_variable& cv) : onSocketErrCv(cv), sendMsgQueue(sq), recvMsgQueue(rq) {
         if (s == INVALID_SOCKET) {
             throw std::runtime_error("NIOSocketSenderReceiver initialization failed: invalid socket.");
         }
         this->socket = s;
+
+#ifdef _WIN32
+        enableVirtualTerminalProcessing();
+#endif
 
         // 启动发送线程
         sendThreadRunFlag.store(true);
@@ -38,13 +66,13 @@ public:
     }
 
     // 将消息放入发送消息队列（生产者）
-    void asyncSendMsg(const std::string& msg) {
+    void asyncSendMsg(const std::string& msg) const {
         // 将字符串复制一份放到队列中
         sendMsgQueue.enqueue(msg);
     }
 
     // 取出接收消息队列的消息（消费者）
-    std::string recvMsg() {
+    std::string recvMsg() const {
         return recvMsgQueue.dequeue();
     }
 
@@ -73,19 +101,19 @@ private:
     // 套接字错误时通知的条件变量
     std::condition_variable& onSocketErrCv;
 
+    // 消息发送队列
+    ThreadSafeQueue<std::string>& sendMsgQueue;
+
+    // 消息接收队列
+    ThreadSafeQueue<std::string>& recvMsgQueue;
+
     // 消息发送线程
     std::thread sendThread;
     std::atomic<bool> sendThreadRunFlag{false};
 
-    // 消息发送队列
-    ThreadSafeQueue<std::string> sendMsgQueue{MSG_QUEUE_MAXSIZE};
-
     // 消息接收线程
     std::thread recvThread;
     std::atomic<bool> recvThreadRunFlag{false};
-
-    // 消息接收队列
-    ThreadSafeQueue<std::string> recvMsgQueue{MSG_QUEUE_MAXSIZE};
 
     // 取出发送消息队列的消息（消费者），并写入到套接字发送缓冲区
     void sendMsgWorker() {
@@ -161,7 +189,7 @@ private:
                 }
                 totalReceived += bytesReceived;
             }
-            std::cout << "[received] " << msgBody << std::endl;
+            std::cout << GREEN << "[Received] " << msgBody << RESET << std::endl;
             recvMsgQueue.enqueue(std::string(msgBody));
         }
     }

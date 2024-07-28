@@ -2,6 +2,7 @@
 #define BLOOM_FILTER_MANAGER_HPP
 
 #include <iostream>
+#include <memory>
 #include <thread>
 #include <atomic>
 #include <future>
@@ -12,14 +13,14 @@
 #include "../BlackListEngine/BlackListEngine.hpp"
 #include "../Utils/StringConverter.hpp"
 
-class BloomFilterManager {
+class BlackListManager {
 public:
-    explicit BloomFilterManager(NioTcpMsgBridge& bridge, const std::map<std::string, std::string>& config) :
-        masterMsgBridge(bridge), startupConfig(config) {
+    explicit BlackListManager(NioTcpMsgBridge& bridge, const std::map<std::string, std::string>& config) :
+        msgBridge(bridge), startupConfig(config) {
         // 启动处理消息线程
         if (!processMsgThread.joinable()) {
             processMsgThreadRunFlag.store(true);
-            processMsgThread = std::thread(&BloomFilterManager::processMsgWorker, this);
+            processMsgThread = std::thread(&BlackListManager::processMsgWorker, this);
         }
 
         // 发送 get_bloom_filter_default_config 消息，阻塞等待回应
@@ -34,7 +35,7 @@ public:
 
         // 黑名单初始化，分配内存
         try {
-            this->blackListEngine = std::make_shared<BlackListEngine>(
+            this->engine = std::make_shared<BlackListEngine>(
                 stringToUInt(maxJwtLifeTime),
                 stringToUInt(bloomFilterRotationTime),
                 stringToSizeT(bloomFilterSize),
@@ -52,11 +53,11 @@ public:
         // 启动节点状态上报线程
         if (!nodeStatusReportThread.joinable()) {
             nodeStatusReportThreadRunFlag.store(true);
-            nodeStatusReportThread = std::thread(&BloomFilterManager::nodeStatusReportWorker, this);
+            nodeStatusReportThread = std::thread(&BlackListManager::nodeStatusReportWorker, this);
         }
     }
 
-    ~BloomFilterManager() {
+    ~BlackListManager() {
         // 停止处理消息线程
         processMsgThreadRunFlag.store(false);
         if (processMsgThread.joinable()) {
@@ -68,17 +69,21 @@ public:
         if (nodeStatusReportThread.joinable()) {
             nodeStatusReportThread.join();
         }
-    };
+    }
+
+    std::shared_ptr<BlackListEngine> getEngine() const {
+        return engine;
+    }
 
 private:
     // 与 master 服务器的消息桥
-    NioTcpMsgBridge& masterMsgBridge;
+    NioTcpMsgBridge& msgBridge;
 
     // 程序启动配置
     std::map<std::string, std::string> startupConfig;
 
-    // 布隆过滤器指针
-    std::shared_ptr<BlackListEngine> blackListEngine{};
+    // 引擎
+    std::shared_ptr<BlackListEngine> engine = nullptr;
 
     // 发送 get_bloom_filter_default_config 消息，查询布隆过滤器默认配置
     std::promise<std::map<std::string, std::string>> getBFDefaultConfigPromise;
@@ -88,7 +93,7 @@ private:
         std::map<std::string, std::string> data;
         data["client_uid"] = "0001";
         const std::string msg = doMsgAssembly(event, data);
-        masterMsgBridge.asyncSendMsg(msg);
+        msgBridge.asyncSendMsg(msg);
 
         // 等待回应
         return getBFDefaultConfigPromise.get_future().get();
@@ -101,12 +106,19 @@ private:
     void processMsgWorker() {
         while (processMsgThreadRunFlag) {
             // 从队列中接收消息（队列空则阻塞）
-            const std::string msg = masterMsgBridge.recvMsg();
+            const std::string msg = msgBridge.recvMsg();
             std::string event;
             std::map<std::string, std::string> data;
             doMsgParse(msg, event, data);
 
             // 处理事件
+            if (event == "revoke") {
+                const std::string token = data["token"];
+                const std::string expTime = data["exp_time"];
+                this->engine->write(token, stringToTimestamp(expTime));
+                continue;
+            }
+
             if (event == "bloom_filter_default_config") {
                 this->getBFDefaultConfigPromise.set_value(data);
                 continue;
@@ -129,15 +141,15 @@ private:
 
             // 收集节点状态
             data["client_uid"] = "0001";
-            data["max_jwt_life_time"] = std::to_string(blackListEngine->getMaxJwtLifeTime()); // T^max_i
-            data["rotation_interval"] = std::to_string(blackListEngine->getRotationInterval()); // T^w_i
-            data["bloom_filter_num"] = std::to_string(blackListEngine->getBloomFilterNum()); // n^bf_i
-            data["black_list_msg_num"] = vectorToString(blackListEngine->getBlackListMsgNum()); // n^jwt_(i-1,j)
-            data["bloom_filter_size"] = std::to_string(blackListEngine->getBloomFilterSize()); // m^bf_i
-            data["hash_function_num"] = std::to_string(blackListEngine->getHashFunctionNum()); // k^hash_i
+            data["max_jwt_life_time"] = std::to_string(engine->getMaxJwtLifeTime()); // T^max_i
+            data["rotation_interval"] = std::to_string(engine->getRotationInterval()); // T^w_i
+            data["bloom_filter_num"] = std::to_string(engine->getBloomFilterNum()); // n^bf_i
+            data["black_list_msg_num"] = vectorToString(engine->getBlackListMsgNum()); // n^jwt_(i-1,j)
+            data["bloom_filter_size"] = std::to_string(engine->getBloomFilterSize()); // m^bf_i
+            data["hash_function_num"] = std::to_string(engine->getHashFunctionNum()); // k^hash_i
 
             const std::string msg = doMsgAssembly(event, data);
-            masterMsgBridge.asyncSendMsg(msg);
+            msgBridge.asyncSendMsg(msg);
         }
     }
 };
