@@ -7,24 +7,32 @@
 #include <cmath>
 #include <string>
 #include <chrono>
-#include <condition_variable>
 #include <future>
 #include <mutex>
 #include <sstream>
 #include <thread>
 
 #include "../Utils/ConfigReader.hpp"
-#include "BaseBloomFilter.hpp"
-#include "../Utils/ThreadSafeQueue.hpp"
+#include "../Utils/ThreadingUtils/ThreadSafeQueue.hpp"
 
-#define CONFIG_FILE_PATH "C:\\Projects\\JWTRevoker_BlackList_cpp\\src\\config.txt"
+#include "BaseBloomFilter.hpp"
+
 
 class BlackListEngine {
 public:
-    BlackListEngine(const unsigned int _maxJwtLifeTime,
-                    const unsigned int _rotationInterval,
-                    const size_t _bloomFilterSize,
-                    const unsigned int _hashFunctionNum) {
+    explicit BlackListEngine(std::map<std::string, std::string>& startupConfig) :
+        startupConfig(startupConfig) {
+    }
+
+    ~BlackListEngine() {
+        stop();
+    }
+
+    // 设置参数
+    void start(const unsigned int& _maxJwtLifeTime,
+               const unsigned int& _rotationInterval,
+               const size_t& _bloomFilterSize,
+               const unsigned int& _hashFunctionNum) {
         if (_maxJwtLifeTime == 0) {
             throw std::invalid_argument("maxJwtLifeTime cannot be 0.");
         }
@@ -37,20 +45,16 @@ public:
         if (_hashFunctionNum == 0) {
             throw std::invalid_argument("hashFunctionNum cannot be 0.");
         }
-        this->maxJwtLifeTime = _maxJwtLifeTime;
-        this->rotationInterval = _rotationInterval;
-        this->bloomFilterSize = _bloomFilterSize;
-        this->hashFunctionNum = _hashFunctionNum;
+        maxJwtLifeTime = _maxJwtLifeTime;
+        rotationInterval = _rotationInterval;
+        bloomFilterSize = _bloomFilterSize;
+        hashFunctionNum = _hashFunctionNum;
 
         // 计算所需布隆过滤器的个数
-        this->bloomFilterNum = std::ceil(this->maxJwtLifeTime / this->rotationInterval);
-
-        // 读取配置文件
-        std::map<std::string, std::string> config = readConfig(CONFIG_FILE_PATH);
-        this->presistFilePath = config["persistent_file_path"];
+        bloomFilterNum = std::ceil(maxJwtLifeTime / rotationInterval);
 
         // 初始化黑名单
-        this->blackList = initialBlackList(this->bloomFilterNum, this->bloomFilterSize, this->hashFunctionNum);
+        blackList = initialBlackList(bloomFilterNum, bloomFilterSize, hashFunctionNum);
 
         // 启动周期轮换线程
         if (!rotateBloomFilterThread.joinable()) {
@@ -59,7 +63,8 @@ public:
         }
     }
 
-    ~BlackListEngine() {
+    // 停止
+    void stop() {
         // 停止周期轮换线程
         rotateBloomFilterThreadRunFlag.store(false);
         if (rotateBloomFilterThread.joinable()) {
@@ -67,9 +72,15 @@ public:
         }
     }
 
+    // 测试是否就绪
+    bool isReady() const {
+        return !blackList.empty();
+    }
+
     // 初始化黑名单
-    std::vector<BaseBloomFilter> initialBlackList(const unsigned int& blackListSize, const unsigned int& bloomFilterSize,
-                                               const unsigned int& hashFunctionNum) const {
+    std::vector<BaseBloomFilter> initialBlackList(const unsigned int& blackListSize,
+                                                  const unsigned int& bloomFilterSize,
+                                                  const unsigned int& hashFunctionNum) const {
         // 创建新的黑名单
         std::vector<BaseBloomFilter> newBlackList;
 
@@ -108,7 +119,7 @@ public:
         // 异步写文件
         std::ostringstream oss;
         oss << token << "," << expTime;
-        auto future = std::async(std::launch::async, &BlackListEngine::writeToFile, this, oss.str());
+        auto future = std::async(std::launch::async, &BlackListEngine::logToFile, this, oss.str());
     }
 
     // 查询是否在黑名单中
@@ -140,12 +151,6 @@ public:
 
     // 重建黑名单
     void rebuildBlackList() {
-        // 更改布隆过滤器引擎状态
-
-        // 创建新的布隆过滤器
-
-        // 从文件中读取记录，写入到布隆过滤器
-
         std::unique_lock<std::mutex> lock(blackListMutex);
         // 返回布隆过滤器
     }
@@ -181,6 +186,9 @@ public:
     }
 
 private:
+    // 配置
+    std::map<std::string, std::string>& startupConfig;
+
     // 黑名单
     std::vector<BaseBloomFilter> blackList;
     std::mutex blackListMutex;
@@ -202,21 +210,20 @@ private:
     std::promise<unsigned int> rotationIntervalProm;
 
     // 持久化到文件
-    ThreadSafeQueue<std::string> logToFileQueue;
-    std::string presistFilePath;
+    ThreadSafeQueue<std::string> logToFileQueue{40960};
 
-    void writeToFile(const std::string& message) const {
+    void logToFile(const std::string& msg) const {
         const auto now_c = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
         std::tm* tm = std::localtime(&now_c);
         tm->tm_min = 0; // 将分钟设为0
         tm->tm_sec = 0; // 将秒钟设为0
         auto hourlyTimestamp = std::mktime(tm);
         std::ostringstream filename_oss;
-        filename_oss << presistFilePath << hourlyTimestamp << ".txt";
+        filename_oss << startupConfig["log_file_path"] << "\\" << hourlyTimestamp << ".txt";
 
         std::ofstream logFile(filename_oss.str(), std::ios::app);
         if (logFile.is_open()) {
-            logFile << message << std::endl;
+            logFile << msg << std::endl;
         }
     }
 
@@ -237,12 +244,13 @@ private:
                 std::unique_lock<std::mutex> lock(blackListMutex);
                 blackList.erase(blackList.begin());
                 blackList.emplace_back(bloomFilterSize, hashFunctionNum);
+
                 const auto now_c = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
-                std::cout << "Rotate bloom filter at time: " << now_c << ", black list memory used: " << bloomFilterNum
-                    * bloomFilterSize / 8 / 1024 / 1024 << "MBytes" << std::endl;
                 std::ostringstream oss;
                 oss << "Rotate bloom filter at time: " << now_c << ", black list memory used: " << bloomFilterNum *
                     bloomFilterSize / 8 / 1024 / 1024 << "MBytes";
+                auto future = std::async(std::launch::async, &BlackListEngine::logToFile, this, oss.str());
+                std::cout << oss.str() << std::endl;
             }
         }
     }

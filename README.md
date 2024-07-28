@@ -6,7 +6,7 @@
 
 createTime: 2024-06-06
 
-updateTIme: 2024-07-25
+updateTIme: 2024-07-29
 
 # 介绍
 
@@ -55,3 +55,7 @@ g++ main.cpp src/BloomFilter/BloomFilter.cpp -o main.exe; .\main.exe
 - 实现了线程安全队列
 - 实现了非阻塞事件驱动的消息收发机制
 - 实现了向 master 服务器身份认证
+
+### 2024-07-29
+
+- 存档

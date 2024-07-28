@@ -1,39 +1,39 @@
 #include <iostream>
 
 #include "detail/Utils/ConfigReader.hpp"
-#include "detail/Utils/StringConverter.hpp"
-#include "detail/Network/MasterServerConn.hpp"
+#include "detail/Utils/NetworkUtils/NioTcpMsgBridge.hpp"
+#include "detail/MasterServerConn/MasterServerConn.hpp"
+#include "detail/BlackListEngine/BlackListEngine.hpp"
 #include "detail/BlackListManager/BlackListManager.hpp"
-#include "detail/Network/ClientService.hpp"
+#include "detail/TCPServer/Server.hpp"
+
+#define CONFIG_FILE "C:\\Projects\\JWTRevoker_BlackList_cpp\\src\\config.txt"
 
 
 int main() {
     std::cout << "JWTRevoker_BlackList is starting..." << std::endl;
 
     // 读取配置文件
-    std::map<std::string, std::string> config = readConfig(CONFIG_FILE_PATH);
+    std::map<std::string, std::string> startupConfig = readConfig(CONFIG_FILE);
 
-    // 读取启动参数
-    const std::string master_server_ip = config["master_server_ip"];
-    const std::string master_server_port = config["master_server_port"];
-    const std::string keepalive_interval = config["keepalive_interval"];
-    const std::string client_service_ip = config["client_service_ip"];
-    const std::string client_service_port = config["client_service_port"];
+    // 连接到master服务器
+    MasterServerConn masterServerConn(startupConfig);
+    NioTcpMsgBridge* msgBridge = masterServerConn.getMsgBridge();
 
-    // 连接到 master 服务器
-    const MasterServerConn masterServerConn(master_server_ip, stringToUShort(master_server_port),
-                                            stringToUInt(keepalive_interval));
+    // 初始化引擎
+    BlackListEngine engine(startupConfig);
 
-    // 初始化布隆过滤器
-    BlackListManager manager(masterServerConn.getMsgBridge(), config);
+    // 初始化管理器
+    const BlackListManager manager(engine, msgBridge, startupConfig);
 
-    auto engine = manager.getEngine();
+    // 检查是否就绪
+    if (!engine.isReady()) {
+        return -1;
+    }
 
-    // 监听客户端
-    ClientService clientService(client_service_ip.c_str(), stringToUShort(client_service_port), engine);
-
-    // 服务器事件循环
-    clientService.exec();
+    // 启动服务
+    Server server(startupConfig, engine);
+    server.exec();
 
     return 0;
 }

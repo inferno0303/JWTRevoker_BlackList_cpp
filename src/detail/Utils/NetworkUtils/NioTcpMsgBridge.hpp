@@ -7,9 +7,10 @@
 #include <cstring>
 #include <winsock2.h>
 
-#include "../../Utils/ThreadSafeQueue.hpp"
+#include "../ThreadingUtils/ThreadSafeQueue.hpp"
 
 #define BUFFER_SIZE 1024
+#define MSG_QUEUE_MAXSIZE 4096
 
 
 // 定义ANSI颜色代码
@@ -37,17 +38,28 @@ inline void enableVirtualTerminalProcessing() {
 
 class NioTcpMsgBridge {
 public:
-    explicit NioTcpMsgBridge(const SOCKET s, ThreadSafeQueue<std::string>& sq, ThreadSafeQueue<std::string>& rq,
-                             std::condition_variable& cv) : onSocketErrCv(cv), sendMsgQueue(sq), recvMsgQueue(rq) {
+    explicit NioTcpMsgBridge(const SOCKET& s, std::condition_variable& cv) : onMsgBridgeErrCv(cv) {
         if (s == INVALID_SOCKET) {
             throw std::runtime_error("NIOSocketSenderReceiver initialization failed: invalid socket.");
         }
-        this->socket = s;
+        setSocket(s);
 
 #ifdef _WIN32
         enableVirtualTerminalProcessing();
 #endif
+    }
 
+    ~NioTcpMsgBridge() {
+        stop();
+    }
+
+    // 设置目标socket
+    void setSocket(const SOCKET& s) {
+        this->socket = s;
+    }
+
+    // 开始工作
+    void start() {
         // 启动发送线程
         sendThreadRunFlag.store(true);
         sendThread = std::thread(&NioTcpMsgBridge::sendMsgWorker, this);
@@ -57,22 +69,23 @@ public:
         recvThread = std::thread(&NioTcpMsgBridge::recvMsgWorker, this);
     }
 
-    ~NioTcpMsgBridge() {
-        // 在析构函数中停止所有线程
+    // 停止工作
+    void stop() {
         sendThreadRunFlag.store(false);
         recvThreadRunFlag.store(false);
         if (sendThread.joinable()) sendThread.join();
         if (recvThread.joinable()) recvThread.join();
     }
 
+
     // 将消息放入发送消息队列（生产者）
-    void asyncSendMsg(const std::string& msg) const {
+    void asyncSendMsg(const std::string& msg) {
         // 将字符串复制一份放到队列中
         sendMsgQueue.enqueue(msg);
     }
 
     // 取出接收消息队列的消息（消费者）
-    std::string recvMsg() const {
+    std::string recvMsg() {
         return recvMsgQueue.dequeue();
     }
 
@@ -86,32 +99,20 @@ public:
         return recvMsgQueue.size();
     }
 
-    // 停止工作
-    void stop() {
-        sendThreadRunFlag.store(false);
-        recvThreadRunFlag.store(false);
-        if (sendThread.joinable()) sendThread.join();
-        if (recvThread.joinable()) recvThread.join();
-    }
-
 private:
     // 目标套接字
     SOCKET socket = INVALID_SOCKET;
 
     // 套接字错误时通知的条件变量
-    std::condition_variable& onSocketErrCv;
+    std::condition_variable& onMsgBridgeErrCv;
 
-    // 消息发送队列
-    ThreadSafeQueue<std::string>& sendMsgQueue;
+    // 消息发送队列、消息接收队列
+    ThreadSafeQueue<std::string> sendMsgQueue{MSG_QUEUE_MAXSIZE};
+    ThreadSafeQueue<std::string> recvMsgQueue{MSG_QUEUE_MAXSIZE};
 
-    // 消息接收队列
-    ThreadSafeQueue<std::string>& recvMsgQueue;
-
-    // 消息发送线程
+    // 消息发送线程、消息接收线程
     std::thread sendThread;
     std::atomic<bool> sendThreadRunFlag{false};
-
-    // 消息接收线程
     std::thread recvThread;
     std::atomic<bool> recvThreadRunFlag{false};
 
@@ -199,10 +200,9 @@ private:
             // 停止线程
             sendThreadRunFlag.store(false);
             recvThreadRunFlag.store(false);
-            std::cout << "Socket error event.\n";
 
             // 通知外部
-            onSocketErrCv.notify_all();
+            onMsgBridgeErrCv.notify_all();
         }
     }
 };

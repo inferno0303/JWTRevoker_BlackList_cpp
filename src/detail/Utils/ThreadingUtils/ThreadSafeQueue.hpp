@@ -12,10 +12,10 @@ template <typename T>
 class ThreadSafeQueue {
 public:
     // 默认构造函数
-    explicit ThreadSafeQueue() = default;
+    ThreadSafeQueue() = default;
 
     // 构造函数：_maxSize 指定了队列最大元素个数
-    explicit ThreadSafeQueue(const size_t _maxSize) {
+    ThreadSafeQueue(const size_t _maxSize) {
         if (_maxSize <= 0) {
             throw std::invalid_argument("maxSize must be greater than 0");
         }

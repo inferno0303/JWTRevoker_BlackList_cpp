@@ -10,14 +10,14 @@ add_executable(JWTRevoker_BlackList
         src/detail/BlackListEngine/BaseBloomFilter.hpp
         src/detail/BlackListEngine/BlackListEngine.hpp
         src/detail/ThirdPartyLibs/nlohmann/json.hpp
-        src/detail/Utils/ThreadSafeQueue.hpp
-        src/detail/Network/NetworkUtils/NioTcpMsgBridge.hpp
-        src/detail/Network/MasterServerConn.hpp
+        src/detail/Utils/ThreadingUtils/ThreadSafeQueue.hpp
+        src/detail/Utils/NetworkUtils/NioTcpMsgBridge.hpp
+        src/detail/MasterServerConn/MasterServerConn.hpp
         src/detail/Utils/ConfigReader.hpp
         src/detail/BlackListManager/BlackListManager.hpp
-        src/detail/Network/NetworkUtils/MsgFormat.hpp
-        src/detail/Utils/StringConverter.hpp
-        src/detail/Network/ClientService.hpp
+        src/detail/Utils/NetworkUtils/MsgFormat.hpp
+        src/detail/Utils/StringParser.hpp
+        src/detail/TCPServer/Server.hpp
 )
 
 # 链接 ws2_32 库

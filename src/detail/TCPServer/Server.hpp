@@ -1,43 +1,63 @@
-#ifndef CLIENTSERVICE_HPP
-#define CLIENTSERVICE_HPP
+#ifndef TCPSERVER_SERVER_HPP
+#define TCPSERVER_SERVER_HPP
 
 #include <iostream>
 #include <thread>
 #include <atomic>
+#include <map>
+#include <memory>
 #include <winsock2.h>
 #include <ws2tcpip.h>
 
-#include "../Utils/StringConverter.hpp"
-#include "NetworkUtils/NioTcpMsgBridge.hpp"
+#include "../Utils/StringParser.hpp"
+#include "../Utils/NetworkUtils/NioTcpMsgBridge.hpp"
+#include "../Utils/NetworkUtils/MsgFormat.hpp"
+
+#include "../BlackListEngine/BlackListEngine.hpp"
 
 #pragma comment(lib, "ws2_32.lib")
 
-class ClientService {
+class Server {
 public:
-    ClientService(const char* ip, const unsigned short port, const std::shared_ptr<BlackListEngine>& e) : engine(e) {
-        // 启动服务器监听线程
+    Server(std::map<std::string, std::string>& startupConfig, BlackListEngine& engine) :
+        ip(startupConfig["client_service_ip"]),
+        port(stringToUShort(startupConfig["client_service_ip"])),
+        engine(engine) {
+    }
+
+    ~Server() {
+        stop();
+    }
+
+    // 启动服务器监听
+    void start() {
         if (!serverThread.joinable()) {
             serverThreadRunFlag.store(true);
-            serverThread = std::thread(&ClientService::listenWorker, this, ip, port);
+            serverThread = std::thread(&Server::listenWorker, this, ip, port);
         }
     }
 
-    ~ClientService() {
-        // 停止服务器监听线程
+    // 停止服务器监听
+    void stop() {
         serverThreadRunFlag.store(false);
         if (serverThread.joinable()) {
             serverThread.join();
         }
     }
 
-    // 服务器事件循环
+    // 服务器监听事件循环
     void exec() {
         if (serverThread.joinable()) serverThread.join();
     }
 
 private:
+    // 监听的ip和端口
+    const std::string& ip;
+    const unsigned short port;
+
     // 黑名单引擎
-    std::shared_ptr<BlackListEngine> engine;
+    BlackListEngine& engine;
+
     // 监听线程
     std::atomic<bool> serverThreadRunFlag{false};
     std::thread serverThread;
@@ -105,18 +125,12 @@ private:
 
     // 处理客户端线程
     void handleClientWorker(const SOCKET clientSocket) const {
-        // 消息发送队列
-        ThreadSafeQueue<std::string> sendMsgQueue{MSG_QUEUE_MAXSIZE};
-
-        // 消息接收队列
-        ThreadSafeQueue<std::string> recvMsgQueue{MSG_QUEUE_MAXSIZE};
-
         // socket错误通知
         std::condition_variable onSocketErrCv;
 
         // 消息桥
         auto msgBridge = std::unique_ptr<NioTcpMsgBridge>(
-            new NioTcpMsgBridge(clientSocket, sendMsgQueue, recvMsgQueue, onSocketErrCv)
+            new NioTcpMsgBridge(clientSocket, onSocketErrCv)
         );
 
         // 接收数据线程，模拟处理数据较慢的情况
@@ -132,7 +146,7 @@ private:
                 if (event == "query") {
                     const std::string token = data["token"];
                     const std::string expTime = data["exp_time"];
-                    const bool result = this->engine->contain(token, stringToTimestamp(expTime));
+                    const bool result = engine.contain(token, stringToTimestamp(expTime));
                     if (result) {
                         data["result"] = "yes";
                     } else {
@@ -151,4 +165,4 @@ private:
     }
 };
 
-#endif //CLIENTSERVICE_HPP
+#endif //TCPSERVER_SERVER_HPP
