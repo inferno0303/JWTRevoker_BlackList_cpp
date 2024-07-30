@@ -62,7 +62,7 @@ private:
     std::atomic<bool> serverThreadRunFlag{false};
     std::thread serverThread;
 
-    void listenWorker(const std::string& ip, const unsigned short& port) {
+    void listenWorker(const std::string& ip_, const unsigned short& port_) {
         WSADATA wsaData{};
         auto serverSocket = INVALID_SOCKET;
         sockaddr_in address = {};
@@ -81,12 +81,12 @@ private:
 
         // 设置地址和端口
         address.sin_family = AF_INET;
-        if (inet_pton(AF_INET, ip.c_str(), &address.sin_addr) <= 0) {
+        if (inet_pton(AF_INET, ip_.c_str(), &address.sin_addr) <= 0) {
             closesocket(serverSocket);
             WSACleanup();
-            throw std::runtime_error("Invalid address/ Address not supported: " + std::string(ip));
+            throw std::runtime_error("Invalid address/ Address not supported: " + std::string(ip_));
         }
-        address.sin_port = htons(port);
+        address.sin_port = htons(port_);
 
         // 绑定套接字到端口
         if (bind(serverSocket, reinterpret_cast<sockaddr*>(&address), sizeof(address)) == SOCKET_ERROR) {
@@ -104,7 +104,7 @@ private:
             throw std::runtime_error("Listen failed: " + std::to_string(errorCode));
         }
 
-        std::cout << "Server listening on port " << port << "..." << std::endl;
+        std::cout << "Server listening on port_ " << port_ << "..." << std::endl;
 
         while (true) {
             auto newSocket = INVALID_SOCKET;
@@ -119,7 +119,7 @@ private:
             std::cout << "New connection accepted." << std::endl;
 
             // 创建线程处理新的客户端连接
-            std::thread(handleClientWorker, this, newSocket).detach();
+            std::thread(&Server::handleClientWorker, this, newSocket).detach();
         }
     }
 
@@ -143,6 +143,7 @@ private:
                 doMsgParse(msg, event, data);
 
                 // 处理事件
+                // 查询是否撤回
                 if (event == "query") {
                     const std::string token = data["token"];
                     const std::string expTime = data["exp_time"];
@@ -156,7 +157,8 @@ private:
                     msgBridge->asyncSendMsg(replyMsg);
                     continue;
                 }
-                std::cout << "Unknow msg event: " << event << std::endl;
+
+                std::cout << "Unknown msg event: " << event << std::endl;
             }
         });
         if (processMsgThread.joinable()) processMsgThread.join();

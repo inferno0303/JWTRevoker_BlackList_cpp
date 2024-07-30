@@ -39,6 +39,7 @@ public:
         std::cout << "Allocation bloom filter memory..." << std::endl;
         engine.start(stringToUInt(maxJwtLifeTime), stringToUInt(bloomFilterRotationTime),
                      stringToSizeT(bloomFilterSize), stringToUInt(numHashFunction));
+        std::cout << "Bloom filter is ready!" << std::endl;
 
         // 启动节点状态上报线程
         if (!nodeStatusReportThread.joinable()) {
@@ -109,7 +110,7 @@ private:
                 this->getBFDefaultConfigPromise.set_value(data);
                 continue;
             }
-            std::cout << "Unknow event: " << event << std::endl;
+            std::cout << "Unknown event: " << event << std::endl;
         }
     }
 

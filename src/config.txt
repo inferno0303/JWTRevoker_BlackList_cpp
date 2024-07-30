@@ -11,4 +11,4 @@ client_service_ip = 127.0.0.1
 client_service_port = 9998
 
 # log file path
-log_file_path = C:\Projects\JWTRevoker_BlackList_cpp\src\log
+log_file_path = C:\MyProjects\JWTRevoker_BlackList_cpp\src\log

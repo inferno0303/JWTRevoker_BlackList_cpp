@@ -26,14 +26,14 @@ public:
         // 连接master服务器
         const auto sock = connectServer(ip, port);
         // 消息桥
-        auto* msgBridge = new NioTcpMsgBridge(sock, onMsgBridgeErrCv);
-        msgBridge->start();
+        auto* bridge = new NioTcpMsgBridge(sock, onMsgBridgeErrCv);
+        bridge->start();
         // 认证
-        if (!doAuth(msgBridge)) {
+        if (!doAuth(bridge)) {
             throw std::runtime_error("Authenticate failed!");
         }
         // 认证成功
-        this->msgBridge = msgBridge;
+        this->msgBridge = bridge;
         std::cout << "Success connect to master server: " << ip << ":" << port << std::endl;
 
         // 启动重新连接线程
@@ -70,11 +70,9 @@ public:
 private:
     // 配置信息
     const std::string& ip;
-    const unsigned short& port;
+    const unsigned short port;
     const unsigned int keepaliveInterval;
 
-    // 连接成功后的套接字
-    SOCKET serverSocket = INVALID_SOCKET;
     // 消息桥、消息桥错误通知
     NioTcpMsgBridge* msgBridge = nullptr;
     std::condition_variable onMsgBridgeErrCv;
@@ -147,7 +145,7 @@ private:
 
 
     // 向服务器验证身份
-    bool doAuth(NioTcpMsgBridge* msgBridge) const {
+    static bool doAuth(NioTcpMsgBridge* msgBridge) {
         // 发送认证信息
         const std::string event = "hello_from_client";
         std::map<std::string, std::string> data;

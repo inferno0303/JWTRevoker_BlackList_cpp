@@ -7,7 +7,7 @@
 #include "detail/BlackListManager/BlackListManager.hpp"
 #include "detail/TCPServer/Server.hpp"
 
-#define CONFIG_FILE "C:\\Projects\\JWTRevoker_BlackList_cpp\\src\\config.txt"
+#define CONFIG_FILE "C:\\MyProjects\\JWTRevoker_BlackList_cpp\\src\\config.txt"
 
 
 int main() {
