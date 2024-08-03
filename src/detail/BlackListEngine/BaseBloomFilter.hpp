@@ -21,7 +21,9 @@ public:
         this->msgNum = 0;
     }
 
-    ~BaseBloomFilter() = default;
+    ~BaseBloomFilter() {
+        bloomFilter.clear();
+    }
 
     void add(const std::string& key) {
         std::vector<size_t> indices = calcHashIndices(key);

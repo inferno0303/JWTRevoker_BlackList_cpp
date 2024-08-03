@@ -29,9 +29,9 @@ inline unsigned int stringToUInt(const std::string& str) {
     }
 }
 
-inline long long stringToTimestamp(const std::string& str) {
+inline size_t stringToSizeT(const std::string& str) {
     try {
-        return std::stoll(str);
+        return std::stoull(str);
     } catch (const std::invalid_argument& e) {
         std::cerr << "Invalid argument: " << e.what() << std::endl;
         return 0; // or handle error
@@ -41,9 +41,9 @@ inline long long stringToTimestamp(const std::string& str) {
     }
 }
 
-inline size_t stringToSizeT(const std::string& str) {
+inline long long stringToTimestamp(const std::string& str) {
     try {
-        return std::stoull(str);
+        return std::stoll(str);
     } catch (const std::invalid_argument& e) {
         std::cerr << "Invalid argument: " << e.what() << std::endl;
         return 0; // or handle error

@@ -6,23 +6,16 @@
 #include <atomic>
 #include <map>
 #include <memory>
-#include <winsock2.h>
-#include <ws2tcpip.h>
 
 #include "../Utils/StringParser.hpp"
-#include "../Utils/NetworkUtils/NioTcpMsgBridge.hpp"
-#include "../Utils/NetworkUtils/MsgFormat.hpp"
-
-#include "../BlackListEngine/BlackListEngine.hpp"
-
-#pragma comment(lib, "ws2_32.lib")
+#include "../Utils/NetworkUtils/TCPMsgHub.hpp"
+#include "../Utils/NetworkUtils/MsgFormatter.hpp"
+#include "../BlackListEngine/Engine.hpp"
 
 class Server {
 public:
-    Server(std::map<std::string, std::string>& startupConfig, BlackListEngine& engine) :
-        ip(startupConfig["client_service_ip"]),
-        port(stringToUShort(startupConfig["client_service_ip"])),
-        engine(engine) {
+    explicit Server(const std::map<std::string, std::string> &_config, const Engine *_engine)
+        : config(_config), engine(_engine) {
     }
 
     ~Server() {
@@ -31,6 +24,8 @@ public:
 
     // 启动服务器监听
     void start() {
+        const std::string &ip = config.at("server_ip");
+        const unsigned short port = stringToUShort(config.at("server_port"));
         if (!serverThread.joinable()) {
             serverThreadRunFlag.store(true);
             serverThread = std::thread(&Server::listenWorker, this, ip, port);
@@ -51,18 +46,17 @@ public:
     }
 
 private:
-    // 监听的ip和端口
-    const std::string& ip;
-    const unsigned short port;
+    // 配置
+    const std::map<std::string, std::string> config;
 
-    // 黑名单引擎
-    BlackListEngine& engine;
+    // 引擎
+    const Engine *engine;
 
     // 监听线程
     std::atomic<bool> serverThreadRunFlag{false};
     std::thread serverThread;
 
-    void listenWorker(const std::string& ip_, const unsigned short& port_) {
+    void listenWorker(const std::string &ip, const unsigned short port) {
         WSADATA wsaData{};
         auto serverSocket = INVALID_SOCKET;
         sockaddr_in address = {};
@@ -81,15 +75,15 @@ private:
 
         // 设置地址和端口
         address.sin_family = AF_INET;
-        if (inet_pton(AF_INET, ip_.c_str(), &address.sin_addr) <= 0) {
+        if (inet_pton(AF_INET, ip.c_str(), &address.sin_addr) <= 0) {
             closesocket(serverSocket);
             WSACleanup();
-            throw std::runtime_error("Invalid address/ Address not supported: " + std::string(ip_));
+            throw std::runtime_error("Invalid address/ Address not supported: " + std::string(ip));
         }
-        address.sin_port = htons(port_);
+        address.sin_port = htons(port);
 
         // 绑定套接字到端口
-        if (bind(serverSocket, reinterpret_cast<sockaddr*>(&address), sizeof(address)) == SOCKET_ERROR) {
+        if (bind(serverSocket, reinterpret_cast<sockaddr *>(&address), sizeof(address)) == SOCKET_ERROR) {
             const int errorCode = WSAGetLastError();
             closesocket(serverSocket);
             WSACleanup();
@@ -104,12 +98,13 @@ private:
             throw std::runtime_error("Listen failed: " + std::to_string(errorCode));
         }
 
-        std::cout << "Server listening on port_ " << port_ << "..." << std::endl;
+        std::cout << "Server listening on port " << port << "..." << std::endl;
 
         while (true) {
             auto newSocket = INVALID_SOCKET;
             int addrlen = sizeof(address);
-            if ((newSocket = accept(serverSocket, reinterpret_cast<sockaddr*>(&address), &addrlen)) == INVALID_SOCKET) {
+            if ((newSocket = accept(serverSocket, reinterpret_cast<sockaddr *>(&address), &addrlen)) ==
+                INVALID_SOCKET) {
                 const int errorCode = WSAGetLastError();
                 closesocket(serverSocket);
                 WSACleanup();
@@ -124,46 +119,41 @@ private:
     }
 
     // 处理客户端线程
-    void handleClientWorker(const SOCKET clientSocket) const {
-        // socket错误通知
-        std::condition_variable onSocketErrCv;
-
-        // 消息桥
-        auto msgBridge = std::unique_ptr<NioTcpMsgBridge>(
-            new NioTcpMsgBridge(clientSocket, onSocketErrCv)
-        );
+    void handleClientWorker(const SOCKET clientSock) const {
+        bool runFlag = true;
+        TCPMsgHub msgHub(clientSock, [&runFlag]() {
+            runFlag = false;
+        });
 
         // 接收数据线程，模拟处理数据较慢的情况
         // 需要添加停止逻辑
-        std::thread processMsgThread([&msgBridge, this] {
-            while (true) {
-                std::string msg = msgBridge->recvMsg();
+        std::thread handler([&msgHub, &runFlag, this] {
+            while (runFlag) {
+                std::string msg = msgHub.recvMsg();
                 std::string event;
                 std::map<std::string, std::string> data;
                 doMsgParse(msg, event, data);
 
-                // 处理事件
                 // 查询是否撤回
                 if (event == "query") {
                     const std::string token = data["token"];
                     const std::string expTime = data["exp_time"];
-                    const bool result = engine.contain(token, stringToTimestamp(expTime));
+                    const bool result = engine->contain(token, stringToTimestamp(expTime));
                     if (result) {
                         data["result"] = "yes";
                     } else {
                         data["result"] = "no";
                     }
                     const std::string replyMsg = doMsgAssembly("query_result", data);
-                    msgBridge->asyncSendMsg(replyMsg);
+                    msgHub.asyncSendMsg(replyMsg);
                     continue;
                 }
 
                 std::cout << "Unknown msg event: " << event << std::endl;
             }
         });
-        if (processMsgThread.joinable()) processMsgThread.join();
-        msgBridge->stop();
-        msgBridge.reset();
+
+        if (handler.joinable()) handler.join();
     }
 };
 

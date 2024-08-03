@@ -1,39 +1,45 @@
 #include <iostream>
 
 #include "detail/Utils/ConfigReader.hpp"
-#include "detail/Utils/NetworkUtils/NioTcpMsgBridge.hpp"
-#include "detail/MasterServerConn/MasterServerConn.hpp"
-#include "detail/BlackListEngine/BlackListEngine.hpp"
-#include "detail/BlackListManager/BlackListManager.hpp"
-#include "detail/TCPServer/Server.hpp"
-
-#define CONFIG_FILE "C:\\MyProjects\\JWTRevoker_BlackList_cpp\\src\\config.txt"
+#include "detail/MasterConnector/MasterConnector.hpp"
+#include "detail/Scheduler/Scheduler.hpp"
+#include "detail/BlackListEngine/Engine.hpp"
+#include "detail/Server/Server.hpp"
 
 
-int main() {
-    std::cout << "JWTRevoker_BlackList is starting..." << std::endl;
+int main(int argc, char *argv[]) {
+    std::string configFilePath = R"(C:\MyProjects\JWTRevoker_BlackList_cpp\src\config.txt)"; // 默认配置文件路径
 
-    // 读取配置文件
-    std::map<std::string, std::string> startupConfig = readConfig(CONFIG_FILE);
-
-    // 连接到master服务器
-    MasterServerConn masterServerConn(startupConfig);
-    NioTcpMsgBridge* msgBridge = masterServerConn.getMsgBridge();
-
-    // 初始化引擎
-    BlackListEngine engine(startupConfig);
-
-    // 初始化管理器
-    const BlackListManager manager(engine, msgBridge, startupConfig);
-
-    // 检查是否就绪
-    if (!engine.isReady()) {
-        return -1;
+    // 解析命令行参数，查找 "-c" 参数来获取配置文件路径
+    for (int i = 1; i < argc; ++i) {
+        if (std::string(argv[i]) == "-c") {
+            if (i + 1 < argc) {
+                configFilePath = argv[i + 1];
+            } else {
+                std::cerr << "Error: -c option requires a file path argument." << std::endl;
+                return 1; // 返回错误代码
+            }
+            break;
+        }
     }
 
+    // 读取配置文件
+    const std::map<std::string, std::string> config = readConfig(configFilePath);
+
+    std::cout << "JWTRevoker_BlackList is starting..." << std::endl;
+
+    // 连接到master服务器
+    MasterConnector conn(config);
+
+    // 初始化调度器
+    const Scheduler scheduler(config, conn);
+
+    // 初始化引擎
+    Engine *engine = scheduler.getEngine();
+
     // 启动服务
-    Server server(startupConfig, engine);
-    server.exec();
+    Server s(config, engine);
+    s.exec();
 
     return 0;
 }

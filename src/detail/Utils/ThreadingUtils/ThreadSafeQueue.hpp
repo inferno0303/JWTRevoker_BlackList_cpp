@@ -8,14 +8,14 @@
 #define QUEUE_DEFAULT_MAXSIZE 1024
 
 // 实现了线程安全（FIFO）队列
-template <typename T>
+template<typename T>
 class ThreadSafeQueue {
 public:
     // 默认构造函数
     ThreadSafeQueue() = default;
 
     // 构造函数：_maxSize 指定了队列最大元素个数
-    ThreadSafeQueue(const size_t _maxSize) {
+    explicit ThreadSafeQueue(const size_t _maxSize) {
         if (_maxSize <= 0) {
             throw std::invalid_argument("maxSize must be greater than 0");
         }
@@ -48,7 +48,7 @@ public:
     }
 
     // 尝试从队列中取出元素，非阻塞，成功则返回 true，失败则返回 false，通过左值引用传递引用
-    bool tryDequeue(T& value) {
+    bool tryDequeue(T &value) {
         std::unique_lock<std::mutex> lock(queueMutex);
         if (queue.empty()) {
             return false;
@@ -76,7 +76,7 @@ public:
     }
 
 private:
-    size_t maxSize{QUEUE_DEFAULT_MAXSIZE}; // 最大队列大小
+    size_t maxSize{QUEUE_DEFAULT_MAXSIZE};
     std::queue<T> queue;
     mutable std::mutex queueMutex;
     std::condition_variable queueCv;

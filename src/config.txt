@@ -1,14 +1,14 @@
 # connect to master server
-master_server_ip = 127.0.0.1
-master_server_port = 9999
+master_ip = 127.0.0.1
+master_port = 9999
 keepalive_interval = 5
 
 # Node status report interval
 node_status_report_interval = 10
 
 # listen
-client_service_ip = 127.0.0.1
-client_service_port = 9998
+server_ip = 127.0.0.1
+server_port = 9998
 
 # log file path
 log_file_path = C:\MyProjects\JWTRevoker_BlackList_cpp\src\log
