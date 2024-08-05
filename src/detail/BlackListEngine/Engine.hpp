@@ -65,6 +65,15 @@ public:
             rotateFiltersThreadRunFlag.store(true);
             rotateFiltersThread = std::thread(&Engine::rotateBloomFilterWorker, this);
         }
+
+        std::cout << R"(
+          ____  _                         ______ _ _ _
+         |  _ \| |                       |  ____(_) | |
+         | |_) | | ___   ___  _ __ ___   | |__   _| | |_ ___ _ __ ___
+         |  _ <| |/ _ \ / _ \| '_ ` _ \  |  __| | | | __/ _ \ '__/ __|
+         | |_) | | (_) | (_) | | | | | | | |    | | | ||  __/ |  \__ \
+         |____/|_|\___/ \___/|_| |_| |_| |_|    |_|_|\__\___|_|  |___/
+        )" << std::endl;
     }
 
     ~Engine() {

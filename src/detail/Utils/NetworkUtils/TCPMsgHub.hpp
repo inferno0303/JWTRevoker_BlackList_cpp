@@ -11,6 +11,13 @@
 #include "ConnectServer.hpp"
 #include "../ThreadingUtils/ThreadSafeQueue.hpp"
 
+inline void setColor(const int color) {
+    // Get the console handle
+    const auto hConsole = GetStdHandle(STD_OUTPUT_HANDLE);
+    // Set the text color
+    SetConsoleTextAttribute(hConsole, color);
+}
+
 #define BUFFER_SIZE 1024
 #define MSG_QUEUE_MAXSIZE 40960
 
@@ -179,7 +186,7 @@ private:
                 }
                 totalSent += bytesSent;
             }
-            std::cout << "[Sent] " << msg << std::endl;
+            // std::cout << "[Sent] " << msg << std::endl;
         }
     }
 
@@ -229,7 +236,9 @@ private:
                 }
                 totalReceived += bytesReceived;
             }
+            setColor(2);
             std::cout << "[Received] " << msgBody << std::endl;
+            setColor(7);
             recvMsgQueue.enqueue(std::string(msgBody));
         }
     }

@@ -26,7 +26,7 @@ int main(int argc, char *argv[]) {
     // 读取配置文件
     const std::map<std::string, std::string> config = readConfig(configFilePath);
 
-    std::cout << "JWTRevoker_BlackList is starting..." << std::endl;
+    std::cout << "Starting..." << std::endl;
 
     // 连接到master服务器
     MasterConnector conn(config);
@@ -39,7 +39,11 @@ int main(int argc, char *argv[]) {
 
     // 启动服务
     Server s(config, engine);
-    s.exec();
+    // s.exec();
+
+    std::cout << "Service is Running." << std::endl;
+
+    std::getchar();
 
     return 0;
 }

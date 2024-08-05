@@ -37,13 +37,11 @@ inline SOCKET connectServer(const std::string &ip, const unsigned short port) {
 
     // 连接到服务器
     while (true) {
-        std::cout << "Connect to " << ip << ":" << port << " ..." <<std::endl;
         try {
             if (connect(sock, reinterpret_cast<sockaddr *>(&address), sizeof(address)) < 0) {
                 const int errorCode = WSAGetLastError();
                 throw std::runtime_error("Connection Failed: " + std::to_string(errorCode));
             }
-            std::cout << "Successfully connected to the server: " << ip << ":" << port << std::endl;
             break;
         } catch (std::exception &e) {
             std::cout << "Failed to connect the server, try again after 5 seconds... " << e.what() << std::endl;

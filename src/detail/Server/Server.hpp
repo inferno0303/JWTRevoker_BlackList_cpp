@@ -5,7 +5,6 @@
 #include <thread>
 #include <atomic>
 #include <map>
-#include <memory>
 
 #include "../Utils/StringParser.hpp"
 #include "../Utils/NetworkUtils/TCPMsgHub.hpp"
@@ -32,17 +31,17 @@ public:
         }
     }
 
+    // 服务器监听事件循环
+    void exec() {
+        if (serverThread.joinable()) serverThread.join();
+    }
+
     // 停止服务器监听
     void stop() {
         serverThreadRunFlag.store(false);
         if (serverThread.joinable()) {
             serverThread.join();
         }
-    }
-
-    // 服务器监听事件循环
-    void exec() {
-        if (serverThread.joinable()) serverThread.join();
     }
 
 private:

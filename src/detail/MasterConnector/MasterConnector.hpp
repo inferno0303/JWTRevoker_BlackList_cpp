@@ -37,6 +37,8 @@ public:
             keepaliveThread = std::thread(&MasterConnector::keepaliveWorker, this,
                                           stringToUInt(config.at("keepalive_interval")));
         }
+
+        std::cout << "Successful connect to master server: " << ip << ":" << port << std::endl;
     }
 
     ~MasterConnector() {
@@ -94,7 +96,7 @@ private:
             }
 
             // 其他消息类型，则交给其他线程处理
-            receivedMsgQueue.enqueue(std::move(msg));
+            receivedMsgQueue.enqueue(msg);
         }
     }
 
