@@ -99,7 +99,7 @@ private:
                 continue;
             }
 
-            std::cout << event << std::endl;
+            // std::cout << event << std::endl;
         }
     }
 
@@ -109,7 +109,7 @@ private:
     std::map<std::string, std::string> getBFDefaultConfig() {
         const std::string event = "get_bloom_filter_default_config";
         std::map<std::string, std::string> data;
-        data["client_uid"] = "0001";
+        data["client_uid"] = config.at("client_uid");
         const std::string msg = doMsgAssembly(event, data);
         conn.asyncSendMsg(msg);
         return getBFDefaultConfigProm.get_future().get();
@@ -126,7 +126,7 @@ private:
             // 收集节点状态
             const std::string event = "node_status";
             std::map<std::string, std::string> data;
-            data["client_uid"] = "0001";
+            data["client_uid"] = config.at("client_uid");
 
             data["max_jwt_life_time"] = std::to_string(engine->getMaxJwtLifeTime()); // T^max_i
             data["rotation_interval"] = std::to_string(engine->getRotationInterval()); // T^w_i

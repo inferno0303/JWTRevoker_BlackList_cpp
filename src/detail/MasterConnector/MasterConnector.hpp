@@ -105,8 +105,8 @@ private:
         // 发送认证请求
         const std::string event = "hello_from_client";
         std::map<std::string, std::string> data;
-        data["client_uid"] = "0001";
-        data["token"] = "abcde";
+        data["client_uid"] = config.at("client_uid");
+        data["token"] = config.at("token");
         const std::string msg = doMsgAssembly(event, data);
         if (!msgHub) return;
         msgHub->asyncSendMsg(msg);
@@ -131,7 +131,7 @@ private:
             std::this_thread::sleep_for(std::chrono::seconds(interval));
             const std::string event = "keepalive";
             std::map<std::string, std::string> data;
-            data["client_uid"] = "0001";
+            data["client_uid"] = config.at("client_uid");
             const std::string msg = doMsgAssembly(event, data);
             if (msgHub) {
                 msgHub->asyncSendMsg(msg);
