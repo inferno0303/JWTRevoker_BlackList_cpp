@@ -9,7 +9,7 @@
 #include <ws2tcpip.h>
 
 // For Windows
-inline SOCKET connectServer(const std::string &ip, const unsigned short port) {
+inline SOCKET connectServer(const std::string& ip, const unsigned short port) {
     WSADATA wsaData{};
     auto sock = INVALID_SOCKET;
     sockaddr_in address = {};
@@ -38,12 +38,13 @@ inline SOCKET connectServer(const std::string &ip, const unsigned short port) {
     // 连接到服务器
     while (true) {
         try {
-            if (connect(sock, reinterpret_cast<sockaddr *>(&address), sizeof(address)) < 0) {
+            if (connect(sock, reinterpret_cast<sockaddr*>(&address), sizeof(address)) < 0) {
                 const int errorCode = WSAGetLastError();
                 throw std::runtime_error("Connection Failed: " + std::to_string(errorCode));
             }
             break;
-        } catch (std::exception &e) {
+        }
+        catch (std::exception& e) {
             std::cout << "Failed to connect the server, try again after 5 seconds... " << e.what() << std::endl;
             std::this_thread::sleep_for(std::chrono::seconds(5));
         }

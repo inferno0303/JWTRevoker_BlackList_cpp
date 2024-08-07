@@ -9,21 +9,18 @@
 #include "../Utils/StringParser.hpp"
 #include "../Utils/NetworkUtils/TCPMsgHub.hpp"
 #include "../Utils/NetworkUtils/MsgFormatter.hpp"
-#include "../BlackListEngine/Engine.hpp"
+#include "../Engine/Engine.hpp"
 
 class Server {
 public:
-    explicit Server(const std::map<std::string, std::string> &_config, const Engine *_engine)
-        : config(_config), engine(_engine) {
-    }
+    explicit Server(const std::map<std::string, std::string>& _config, const Engine* _engine)
+        : config(_config), engine(_engine) {}
 
-    ~Server() {
-        stop();
-    }
+    ~Server() { stop(); }
 
     // 启动服务器监听
     void start() {
-        const std::string &ip = config.at("server_ip");
+        const std::string& ip = config.at("server_ip");
         const unsigned short port = stringToUShort(config.at("server_port"));
         if (!serverThread.joinable()) {
             serverThreadRunFlag.store(true);
@@ -32,16 +29,12 @@ public:
     }
 
     // 服务器监听事件循环
-    void exec() {
-        if (serverThread.joinable()) serverThread.join();
-    }
+    void exec() { if (serverThread.joinable()) serverThread.join(); }
 
     // 停止服务器监听
     void stop() {
         serverThreadRunFlag.store(false);
-        if (serverThread.joinable()) {
-            serverThread.join();
-        }
+        if (serverThread.joinable()) { serverThread.join(); }
     }
 
 private:
@@ -49,13 +42,13 @@ private:
     const std::map<std::string, std::string> config;
 
     // 引擎
-    const Engine *engine;
+    const Engine* engine;
 
     // 监听线程
     std::atomic<bool> serverThreadRunFlag{false};
     std::thread serverThread;
 
-    void listenWorker(const std::string &ip, const unsigned short port) {
+    void listenWorker(const std::string& ip, const unsigned short port) {
         WSADATA wsaData{};
         auto serverSocket = INVALID_SOCKET;
         sockaddr_in address = {};
@@ -82,7 +75,7 @@ private:
         address.sin_port = htons(port);
 
         // 绑定套接字到端口
-        if (bind(serverSocket, reinterpret_cast<sockaddr *>(&address), sizeof(address)) == SOCKET_ERROR) {
+        if (bind(serverSocket, reinterpret_cast<sockaddr*>(&address), sizeof(address)) == SOCKET_ERROR) {
             const int errorCode = WSAGetLastError();
             closesocket(serverSocket);
             WSACleanup();
@@ -102,7 +95,7 @@ private:
         while (true) {
             auto newSocket = INVALID_SOCKET;
             int addrlen = sizeof(address);
-            if ((newSocket = accept(serverSocket, reinterpret_cast<sockaddr *>(&address), &addrlen)) ==
+            if ((newSocket = accept(serverSocket, reinterpret_cast<sockaddr*>(&address), &addrlen)) ==
                 INVALID_SOCKET) {
                 const int errorCode = WSAGetLastError();
                 closesocket(serverSocket);
@@ -120,9 +113,7 @@ private:
     // 处理客户端线程
     void handleClientWorker(const SOCKET clientSock) const {
         bool runFlag = true;
-        TCPMsgHub msgHub(clientSock, [&runFlag]() {
-            runFlag = false;
-        });
+        TCPMsgHub msgHub(clientSock, [&runFlag]() { runFlag = false; });
 
         // 接收数据线程，模拟处理数据较慢的情况
         // 需要添加停止逻辑
@@ -138,11 +129,8 @@ private:
                     const std::string token = data["token"];
                     const std::string expTime = data["exp_time"];
                     const bool result = engine->contain(token, stringToTimestamp(expTime));
-                    if (result) {
-                        data["result"] = "yes";
-                    } else {
-                        data["result"] = "no";
-                    }
+                    if (result) { data["result"] = "yes"; }
+                    else { data["result"] = "no"; }
                     const std::string replyMsg = doMsgAssembly("query_result", data);
                     msgHub.asyncSendMsg(replyMsg);
                     continue;

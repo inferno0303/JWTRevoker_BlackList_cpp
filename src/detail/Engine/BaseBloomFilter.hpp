@@ -21,31 +21,21 @@ public:
         this->msgNum = 0;
     }
 
-    ~BaseBloomFilter() {
-        bloomFilter.clear();
-    }
+    ~BaseBloomFilter() { bloomFilter.clear(); }
 
     void add(const std::string& key) {
         std::vector<size_t> indices = calcHashIndices(key);
-        for (const size_t index : indices) {
-            bloomFilter[index % bloomFilterSize] = true;
-        }
+        for (const size_t index : indices) { bloomFilter[index % bloomFilterSize] = true; }
         ++msgNum;
     }
 
     bool contains(const std::string& key) const {
         std::vector<size_t> indices = calcHashIndices(key);
-        for (const size_t index : indices) {
-            if (!bloomFilter[index % bloomFilterSize]) {
-                return false;
-            }
-        }
+        for (const size_t index : indices) { if (!bloomFilter[index % bloomFilterSize]) { return false; } }
         return true;
     }
 
-    unsigned long getMsgNum() const {
-        return msgNum;
-    }
+    unsigned long getMsgNum() const { return msgNum; }
 
 private:
     std::vector<bool> bloomFilter;

@@ -3,19 +3,18 @@
 #include "detail/Utils/ConfigReader.hpp"
 #include "detail/MasterConnector/MasterConnector.hpp"
 #include "detail/Scheduler/Scheduler.hpp"
-#include "detail/BlackListEngine/Engine.hpp"
+#include "detail/Engine/Engine.hpp"
 #include "detail/Server/Server.hpp"
 
 
-int main(int argc, char *argv[]) {
+int main(int argc, char* argv[]) {
     std::string configFilePath = R"(C:\MyProjects\JWTRevoker_BlackList_cpp\src\config.txt)"; // 默认配置文件路径
 
     // 解析命令行参数，查找 "-c" 参数来获取配置文件路径
     for (int i = 1; i < argc; ++i) {
         if (std::string(argv[i]) == "-c") {
-            if (i + 1 < argc) {
-                configFilePath = argv[i + 1];
-            } else {
+            if (i + 1 < argc) { configFilePath = argv[i + 1]; }
+            else {
                 std::cerr << "Error: -c option requires a file path argument." << std::endl;
                 return 1; // 返回错误代码
             }
@@ -35,7 +34,7 @@ int main(int argc, char *argv[]) {
     const Scheduler scheduler(config, conn);
 
     // 初始化引擎
-    Engine *engine = scheduler.getEngine();
+    Engine* engine = scheduler.getEngine();
 
     // 启动服务
     Server s(config, engine);

@@ -4,11 +4,11 @@ master_port = 9999
 keepalive_interval = 5
 
 # client_uid
-client_uid = 0002
-token = token0002
+client_uid = 0001
+token = token0001
 
 # Node status report interval
-node_status_report_interval = 15
+node_status_report_interval = 10
 
 # listen
 server_ip = 127.0.0.1

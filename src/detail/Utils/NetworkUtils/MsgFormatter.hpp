@@ -6,27 +6,23 @@
 
 #include "../../ThirdPartyLibs/nlohmann/json.hpp"
 
-inline std::string doMsgAssembly(const std::string &event, const std::map<std::string, std::string> &data) {
+inline std::string doMsgAssembly(const std::string& event, const std::map<std::string, std::string>& data) {
     nlohmann::basic_json<nlohmann::ordered_map> jsonObject;
 
     // 按顺序添加键值对
     jsonObject["event"] = event;
 
     nlohmann::json dataObject;
-    for (const auto &kv: data) {
-        dataObject[kv.first] = kv.second;
-    }
+    for (const auto& kv : data) { dataObject[kv.first] = kv.second; }
     jsonObject["data"] = dataObject;
 
     return jsonObject.dump();
 }
 
-inline void doMsgParse(const std::string &jsonStr, std::string &event, std::map<std::string, std::string> &data) {
+inline void doMsgParse(const std::string& jsonStr, std::string& event, std::map<std::string, std::string>& data) {
     nlohmann::json jsonObject = nlohmann::json::parse(jsonStr);
 
-    if (jsonObject.contains("event")) {
-        event = jsonObject["event"].get<std::string>();
-    }
+    if (jsonObject.contains("event")) { event = jsonObject["event"].get<std::string>(); }
 
     if (jsonObject.contains("data")) {
         nlohmann::json dataObject = jsonObject["data"];
@@ -37,31 +33,24 @@ inline void doMsgParse(const std::string &jsonStr, std::string &event, std::map<
                 // 遍历逻辑
                 try {
                     // 如果当前值是字符串类型
-                    if (it.value().is_string()) {
-                        data[it.key()] = it.value().get<std::string>();
-                    }
+                    if (it.value().is_string()) { data[it.key()] = it.value().get<std::string>(); }
                     // 如果当前值是数字类型
-                    else if (it.value().is_number()) {
-                        data[it.key()] = std::to_string(it.value().get<double>());
-                    }
+                    else if (it.value().is_number()) { data[it.key()] = std::to_string(it.value().get<double>()); }
                     // 处理其他类型，例如布尔值或其他JSON对象
-                    else if (it.value().is_boolean()) {
-                        data[it.key()] = it.value().get<bool>() ? "true" : "false";
-                    } else if (it.value().is_null()) {
-                        data[it.key()] = "null";
-                    }
+                    else if (it.value().is_boolean()) { data[it.key()] = it.value().get<bool>() ? "true" : "false"; }
+                    else if (it.value().is_null()) { data[it.key()] = "null"; }
                     // 处理其他无法预料的类型
-                    else {
-                        data[it.key()] = "unsupported_type";
-                    }
-                } catch (const std::exception &e) {
+                    else { data[it.key()] = "unsupported_type"; }
+                }
+                catch (const std::exception& e) {
                     // 如果转换失败，捕获异常并处理
                     std::cerr << "Error parsing key: " << it.key() << ", value: " << it.value() << ", error: " << e.
-                            what() << std::endl;
+                        what() << std::endl;
                     data[it.key()] = "error";
                 }
             }
-        } else {
+        }
+        else {
             // 处理 dataObject 不是对象或数组的情况
             const std::string strData = dataObject.dump(); // 使用 dump() 将其他类型转换为字符串
             data["message"] = strData;

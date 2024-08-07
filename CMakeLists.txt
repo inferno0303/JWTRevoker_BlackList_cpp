@@ -5,20 +5,20 @@ set(CMAKE_CXX_STANDARD 11)
 
 add_executable(JWTRevoker_BlackList
         src/main.cpp
-        src/detail/BlackListEngine/SHA256/SHA256.h
-        src/detail/BlackListEngine/SHA256/SHA256.cpp
-        src/detail/BlackListEngine/BaseBloomFilter.hpp
-        src/detail/BlackListEngine/Engine.hpp
-        src/detail/ThirdPartyLibs/nlohmann/json.hpp
-        src/detail/Utils/ThreadingUtils/ThreadSafeQueue.hpp
+        src/detail/Engine/SHA256/SHA256.h
+        src/detail/Engine/SHA256/SHA256.cpp
+        src/detail/Engine/BaseBloomFilter.hpp
         src/detail/MasterConnector/MasterConnector.hpp
+        src/detail/Engine/Engine.hpp
+        src/detail/Scheduler/Scheduler.hpp
+        src/detail/Utils/StringParser.hpp
+        src/detail/Utils/ThreadingUtils/ThreadSafeQueue.hpp
         src/detail/Utils/ConfigReader.hpp
         src/detail/Utils/NetworkUtils/MsgFormatter.hpp
-        src/detail/Utils/StringParser.hpp
-        src/detail/Server/Server.hpp
         src/detail/Utils/NetworkUtils/ConnectServer.hpp
         src/detail/Utils/NetworkUtils/TCPMsgHub.hpp
-        src/detail/Scheduler/Scheduler.hpp
+        src/detail/Server/Server.hpp
+        src/detail/ThirdPartyLibs/nlohmann/json.hpp
 )
 
 # 链接 ws2_32 库

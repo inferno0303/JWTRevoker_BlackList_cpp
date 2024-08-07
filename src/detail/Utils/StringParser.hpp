@@ -6,9 +6,8 @@
 #include <vector>
 
 inline unsigned short stringToUShort(const std::string& str) {
-    try {
-        return std::stoul(str);
-    } catch (const std::invalid_argument& e) {
+    try { return std::stoul(str); }
+    catch (const std::invalid_argument& e) {
         std::cerr << "Invalid argument: " << e.what() << std::endl;
         return 0; // or handle error
     } catch (const std::out_of_range& e) {
@@ -18,9 +17,8 @@ inline unsigned short stringToUShort(const std::string& str) {
 }
 
 inline unsigned int stringToUInt(const std::string& str) {
-    try {
-        return std::stoul(str);
-    } catch (const std::invalid_argument& e) {
+    try { return std::stoul(str); }
+    catch (const std::invalid_argument& e) {
         std::cerr << "Invalid argument: " << e.what() << std::endl;
         return 0; // or handle error
     } catch (const std::out_of_range& e) {
@@ -30,9 +28,8 @@ inline unsigned int stringToUInt(const std::string& str) {
 }
 
 inline size_t stringToSizeT(const std::string& str) {
-    try {
-        return std::stoull(str);
-    } catch (const std::invalid_argument& e) {
+    try { return std::stoull(str); }
+    catch (const std::invalid_argument& e) {
         std::cerr << "Invalid argument: " << e.what() << std::endl;
         return 0; // or handle error
     } catch (const std::out_of_range& e) {
@@ -42,9 +39,8 @@ inline size_t stringToSizeT(const std::string& str) {
 }
 
 inline long long stringToTimestamp(const std::string& str) {
-    try {
-        return std::stoll(str);
-    } catch (const std::invalid_argument& e) {
+    try { return std::stoll(str); }
+    catch (const std::invalid_argument& e) {
         std::cerr << "Invalid argument: " << e.what() << std::endl;
         return 0; // or handle error
     } catch (const std::out_of_range& e) {
@@ -57,9 +53,7 @@ inline std::string vectorToString(const std::vector<unsigned long>& vec) {
     std::string result = "[";
 
     for (size_t i = 0; i < vec.size(); ++i) {
-        if (i > 0) {
-            result += ",";
-        }
+        if (i > 0) { result += ","; }
         result += std::to_string(vec[i]);
     }
 

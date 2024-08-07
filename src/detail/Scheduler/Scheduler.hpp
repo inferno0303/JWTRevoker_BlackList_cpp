@@ -5,12 +5,12 @@
 #include <string>
 #include <future>
 
-#include "../BlackListEngine/Engine.hpp"
+#include "../Engine/Engine.hpp"
 #include "../MasterConnector/MasterConnector.hpp"
 
 class Scheduler {
 public:
-    explicit Scheduler(const std::map<std::string, std::string> &_config, MasterConnector &_conn)
+    explicit Scheduler(const std::map<std::string, std::string>& _config, MasterConnector& _conn)
         : config(_config), conn(_conn) {
         // 启动处理消息线程
         if (!msgProcessThread.joinable()) {
@@ -42,33 +42,27 @@ public:
     ~Scheduler() {
         // 停止处理消息线程
         msgProcessThreadRunFlag.store(false);
-        if (msgProcessThread.joinable()) {
-            msgProcessThread.join();
-        }
+        if (msgProcessThread.joinable()) { msgProcessThread.join(); }
 
         // 停止节点状态上报线程
         nodeStatusReportThreadRunFlag.store(false);
-        if (nodeStatusReportThread.joinable()) {
-            nodeStatusReportThread.join();
-        }
+        if (nodeStatusReportThread.joinable()) { nodeStatusReportThread.join(); }
 
         // 清理引擎
         free(engine);
     }
 
-    Engine *getEngine() const {
-        return engine;
-    }
+    Engine* getEngine() const { return engine; }
 
 private:
     // 配置
-    const std::map<std::string, std::string> &config;
+    const std::map<std::string, std::string>& config;
 
     // master服务器连接
-    MasterConnector &conn;
+    MasterConnector& conn;
 
     // 引擎
-    Engine *engine = nullptr;
+    Engine* engine = nullptr;
 
     // 处理消息线程
     std::atomic<bool> msgProcessThreadRunFlag{false};
@@ -85,9 +79,7 @@ private:
             if (event == "revoke") {
                 const std::string token = data["token"];
                 const std::string expTime = data["exp_time"];
-                if (engine) {
-                    engine->write(token, stringToTimestamp(expTime));
-                }
+                if (engine) { engine->write(token, stringToTimestamp(expTime)); }
                 continue;
             }
 
@@ -104,7 +96,7 @@ private:
     }
 
     // 发送 get_bloom_filter_default_config 消息，查询布隆过滤器默认配置
-    std::promise<std::map<std::string, std::string> > getBFDefaultConfigProm;
+    std::promise<std::map<std::string, std::string>> getBFDefaultConfigProm;
 
     std::map<std::string, std::string> getBFDefaultConfig() {
         const std::string event = "get_bloom_filter_default_config";

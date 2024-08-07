@@ -24,7 +24,7 @@ inline void setColor(const int color) {
 class TCPMsgHub {
 public:
     // 作为客户端，主动连接服务器，并在断开连接时主动重连
-    explicit TCPMsgHub(const std::string &ip, const unsigned short port) {
+    explicit TCPMsgHub(const std::string& ip, const unsigned short port) {
         // 连接到服务器，启动发送和接收线程
         startConnection(ip, port);
 
@@ -34,8 +34,8 @@ public:
     }
 
     // 作为客户端，主动连接服务器，并在断开连接时主动重连，在重连后异步执行回调函数
-    explicit TCPMsgHub(const std::string &ip, const unsigned short port,
-                       const std::function<void()> &watchDogCallback) {
+    explicit TCPMsgHub(const std::string& ip, const unsigned short port,
+                       const std::function<void()>& watchDogCallback) {
         // 连接到服务器，启动发送和接收线程
         startConnection(ip, port);
 
@@ -45,7 +45,7 @@ public:
     }
 
     // 作为服务端，监听客户端套接字，并在断开连接时触发回调函数，通知外部清理资源
-    explicit TCPMsgHub(const SOCKET sock, const std::function<void()> &watchDogCallback) {
+    explicit TCPMsgHub(const SOCKET sock, const std::function<void()>& watchDogCallback) {
         // 监听目标套接字，启动发送和接收线程
         startListen(sock);
 
@@ -64,30 +64,24 @@ public:
     }
 
     // 将消息放入发送消息队列（生产者）
-    void asyncSendMsg(const std::string &msg) {
+    void asyncSendMsg(const std::string& msg) {
         // 将字符串复制一份放到队列中
         sendMsgQueue.enqueue(msg);
     }
 
     // 取出接收消息队列的消息（消费者）
-    std::string recvMsg() {
-        return recvMsgQueue.dequeue();
-    }
+    std::string recvMsg() { return recvMsgQueue.dequeue(); }
 
     // 发送消息队列长度
-    size_t sendMsgQueueSize() const {
-        return sendMsgQueue.size();
-    }
+    size_t sendMsgQueueSize() const { return sendMsgQueue.size(); }
 
     // 接收消息队列长度
-    size_t recvMsgQueueSize() const {
-        return recvMsgQueue.size();
-    }
+    size_t recvMsgQueueSize() const { return recvMsgQueue.size(); }
 
 private:
     SOCKET sock = INVALID_SOCKET;
 
-    void startConnection(const std::string &ip, const unsigned short port) {
+    void startConnection(const std::string& ip, const unsigned short port) {
         sock = connectServer(ip, port);
         sendThreadRunFlag.store(true);
         recvThreadRunFlag.store(true);
@@ -117,37 +111,33 @@ private:
     std::atomic<bool> watchDogThreadRunFlag{false};
 
     // 作为客户端，主动连接服务器，并在断开连接时主动重连
-    void watchDogAsAClient(const std::string &ip, const unsigned short port, const std::function<void()> &callback) {
+    void watchDogAsAClient(const std::string& ip, const unsigned short port, const std::function<void()>& callback) {
         while (watchDogThreadRunFlag.load()) {
             std::this_thread::sleep_for(std::chrono::seconds(1));
             if (connectionErrFlag) {
                 closeConnection();
                 connectionErrFlag = false;
                 startConnection(ip, port);
-                if (callback) {
-                    std::future<void> result = std::async(std::launch::async, callback);
-                }
+                if (callback) { std::future<void> result = std::async(std::launch::async, callback); }
             }
         }
     }
 
     // 作为服务端，监听客户端套接字，并在断开连接时触发回调函数，通知外部清理资源
-    void watchDogAsAServer(const std::function<void()> &callback) {
+    void watchDogAsAServer(const std::function<void()>& callback) {
         while (watchDogThreadRunFlag.load()) {
             std::this_thread::sleep_for(std::chrono::seconds(1));
             if (connectionErrFlag) {
                 closeConnection();
-                if (callback) {
-                    std::future<void> result = std::async(std::launch::async, callback);
-                }
+                if (callback) { std::future<void> result = std::async(std::launch::async, callback); }
                 break;
             }
         }
     }
 
     // 消息发送队列、消息接收队列
-    ThreadSafeQueue<std::string> sendMsgQueue{MSG_QUEUE_MAXSIZE};
-    ThreadSafeQueue<std::string> recvMsgQueue{MSG_QUEUE_MAXSIZE};
+    ThreadSafeQueue<std::string> sendMsgQueue{};
+    ThreadSafeQueue<std::string> recvMsgQueue{};
 
     // 消息发送线程
     std::thread sendThread;

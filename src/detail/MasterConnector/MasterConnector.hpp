@@ -14,10 +14,10 @@
 // 实现了与master服务器通信的逻辑
 class MasterConnector {
 public:
-    explicit MasterConnector(const std::map<std::string, std::string> &_config)
+    explicit MasterConnector(const std::map<std::string, std::string>& _config)
         : config(_config) {
         // 启动消息桥
-        const std::string &ip = config.at("master_ip");
+        const std::string& ip = config.at("master_ip");
         const unsigned short port = stringToUShort(config.at("master_port"));
         const std::function<void()> reconnCallback = std::bind(&MasterConnector::auth, this); // 用于重新发送认证请求
         msgHub = new TCPMsgHub(ip, port, reconnCallback);
@@ -44,29 +44,21 @@ public:
     ~MasterConnector() {
         // 停止发送心跳包线程
         keepaliveThreadRunFlag.store(false);
-        if (keepaliveThread.joinable()) {
-            keepaliveThread.join();
-        }
+        if (keepaliveThread.joinable()) { keepaliveThread.join(); }
 
         free(msgHub);
     }
 
-    std::string recvMsg() {
-        return receivedMsgQueue.dequeue();
-    }
+    std::string recvMsg() { return receivedMsgQueue.dequeue(); }
 
-    void asyncSendMsg(const std::string &msg) const {
-        if (msgHub) {
-            msgHub->asyncSendMsg(msg);
-        }
-    }
+    void asyncSendMsg(const std::string& msg) const { if (msgHub) { msgHub->asyncSendMsg(msg); } }
 
 private:
     // 配置
-    const std::map<std::string, std::string> &config;
+    const std::map<std::string, std::string>& config;
 
     // 消息桥
-    TCPMsgHub *msgHub;
+    TCPMsgHub* msgHub;
 
     // 接收消息线程
     std::string authResult; // 认证结果
@@ -114,9 +106,7 @@ private:
         // 等待认证结果
         std::unique_lock<std::mutex> lock(mtx);
         cv.wait(lock, [this] { return authResult == "auth_success" || authResult == "auth_failed"; });
-        if (authResult == "auth_success") {
-            return;
-        }
+        if (authResult == "auth_success") { return; }
         if (authResult == "auth_failed") {
             throw std::runtime_error("Authenticate failed!"); // 认证失败
         }
@@ -133,9 +123,7 @@ private:
             std::map<std::string, std::string> data;
             data["client_uid"] = config.at("client_uid");
             const std::string msg = doMsgAssembly(event, data);
-            if (msgHub) {
-                msgHub->asyncSendMsg(msg);
-            }
+            if (msgHub) { msgHub->asyncSendMsg(msg); }
         }
     }
 };
