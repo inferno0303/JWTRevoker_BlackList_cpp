@@ -76,7 +76,7 @@ private:
             doMsgParse(msg, event, data);
 
             // 撤回
-            if (event == "revoke") {
+            if (event == "revoke_jwt") {
                 const std::string token = data["token"];
                 const std::string expTime = data["exp_time"];
                 if (engine) { engine->write(token, stringToTimestamp(expTime)); }

@@ -1,7 +1,9 @@
 cmake_minimum_required(VERSION 3.28)
 project(JWTRevoker_BlackList)
 
-set(CMAKE_CXX_STANDARD 11)
+set(CMAKE_CXX_STANDARD 20)
+
+include_directories("include")
 
 add_executable(JWTRevoker_BlackList
         src/main.cpp
@@ -18,8 +20,11 @@ add_executable(JWTRevoker_BlackList
         src/detail/Utils/NetworkUtils/ConnectServer.hpp
         src/detail/Utils/NetworkUtils/TCPMsgHub.hpp
         src/detail/Server/Server.hpp
-        src/detail/ThirdPartyLibs/nlohmann/json.hpp
+        src/detail/MasterConnector/TcpClient.hpp
 )
 
-# 链接 ws2_32 库
-target_link_libraries(JWTRevoker_BlackList ws2_32)
+
+if (WIN32)
+    # 链接 ws2_32 mswsock 库
+    target_link_libraries(JWTRevoker_BlackList ws2_32 mswsock)
+endif ()

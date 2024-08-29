@@ -6,7 +6,8 @@
 #include <map>
 
 #include "../Utils/StringParser.hpp"
-#include "../Utils/NetworkUtils/TCPMsgHub.hpp"
+// #include "../Utils/NetworkUtils/TCPMsgHub.hpp"
+#include "TcpClient.hpp"
 #include "../Utils/NetworkUtils/MsgFormatter.hpp"
 #include "../Utils/ThreadingUtils/ThreadSafeQueue.hpp"
 
@@ -14,13 +15,13 @@
 // 实现了与master服务器通信的逻辑
 class MasterConnector {
 public:
-    explicit MasterConnector(const std::map<std::string, std::string>& _config)
+    explicit MasterConnector(const std::map<std::string, std::string> &_config)
         : config(_config) {
         // 启动消息桥
-        const std::string& ip = config.at("master_ip");
+        const std::string &ip = config.at("master_ip");
         const unsigned short port = stringToUShort(config.at("master_port"));
         const std::function<void()> reconnCallback = std::bind(&MasterConnector::auth, this); // 用于重新发送认证请求
-        msgHub = new TCPMsgHub(ip, port, reconnCallback);
+        msgHub = new TcpClient(ip, port);
 
         // 启动接收消息线程
         if (!receiveMsgThread.joinable()) {
@@ -51,14 +52,14 @@ public:
 
     std::string recvMsg() { return receivedMsgQueue.dequeue(); }
 
-    void asyncSendMsg(const std::string& msg) const { if (msgHub) { msgHub->asyncSendMsg(msg); } }
+    void asyncSendMsg(const std::string &msg) const { if (msgHub) { msgHub->asyncSendMsg(msg); } }
 
 private:
     // 配置
-    const std::map<std::string, std::string>& config;
+    const std::map<std::string, std::string> &config;
 
     // 消息桥
-    TCPMsgHub* msgHub;
+    TcpClient *msgHub;
 
     // 接收消息线程
     std::string authResult; // 认证结果

@@ -203,6 +203,12 @@ private:
         }
     }
 
+    // // 载入log记录到布隆过滤器
+    // void loadLogFile() {
+    //     std::string logFilePath = config.at("log_file_path");
+    //
+    // }
+
     // 重建布隆过滤器要用到的锁
     std::mutex filtersMtx;
 
