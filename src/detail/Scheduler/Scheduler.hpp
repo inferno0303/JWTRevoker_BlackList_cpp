@@ -6,16 +6,16 @@
 #include <future>
 
 #include "../Engine/Engine.hpp"
-#include "../MasterConnector/MasterConnector.hpp"
+#include "../TcpSession/TcpSession.hpp"
 
 class Scheduler {
 public:
-    explicit Scheduler(const std::map<std::string, std::string>& _config, MasterConnector& _conn)
-        : config(_config), conn(_conn) {
+    explicit Scheduler(const std::map<std::string, std::string> &config_, TcpSession &session_)
+        : config(config_), session(session_) {
         // 启动处理消息线程
-        if (!msgProcessThread.joinable()) {
-            msgProcessThreadRunFlag.store(true);
-            msgProcessThread = std::thread(&Scheduler::msgProcessWorker, this);
+        if (!msgProcThread.joinable()) {
+            msgProcThreadRunFlag.store(true);
+            msgProcThread = std::thread(&Scheduler::msgProcWorker, this);
         }
 
         // 查询布隆过滤器默认配置
@@ -28,8 +28,15 @@ public:
         const unsigned int hashFunctionNum = stringToUInt(bfDefaultConfig.at("hash_function_num"));
 
         // 初始化引擎
-        std::cout << "\nInitialize Bloom filter engine..." << std::endl;
+        std::cout << std::endl << "Initialize Bloom filter engine..." << std::endl;
         engine = new Engine(config, maxJwtLifeTime, rotationInterval, bloomFilterSize, hashFunctionNum);
+
+        // 启动发送心跳包线程
+        if (!keepaliveThread.joinable()) {
+            keepaliveThreadRunFlag.store(true);
+            keepaliveThread = std::thread(&Scheduler::keepaliveWorker, this,
+                                          stringToUInt(config.at("keepalive_interval")));
+        }
 
         // 启动节点上报线程
         if (!nodeStatusReportThread.joinable()) {
@@ -41,36 +48,37 @@ public:
 
     ~Scheduler() {
         // 停止处理消息线程
-        msgProcessThreadRunFlag.store(false);
-        if (msgProcessThread.joinable()) { msgProcessThread.join(); }
+        msgProcThreadRunFlag.store(false);
+        if (msgProcThread.joinable()) msgProcThread.join();
+
+        // 停止发送心跳包线程
+        keepaliveThreadRunFlag.store(false);
+        if (keepaliveThread.joinable()) keepaliveThread.join();
 
         // 停止节点状态上报线程
         nodeStatusReportThreadRunFlag.store(false);
-        if (nodeStatusReportThread.joinable()) { nodeStatusReportThread.join(); }
+        if (nodeStatusReportThread.joinable()) nodeStatusReportThread.join();
 
         // 清理引擎
         free(engine);
     }
 
-    Engine* getEngine() const { return engine; }
+    [[nodiscard]] Engine *getEngine() const { return engine; }
 
 private:
-    // 配置
-    const std::map<std::string, std::string>& config;
-
-    // master服务器连接
-    MasterConnector& conn;
+    const std::map<std::string, std::string> &config;
+    TcpSession &session;
 
     // 引擎
-    Engine* engine = nullptr;
+    Engine *engine = nullptr;
 
     // 处理消息线程
-    std::atomic<bool> msgProcessThreadRunFlag{false};
-    std::thread msgProcessThread;
+    std::atomic<bool> msgProcThreadRunFlag{false};
+    std::thread msgProcThread;
 
-    void msgProcessWorker() {
-        while (msgProcessThreadRunFlag) {
-            std::string msg = conn.recvMsg();
+    void msgProcWorker() {
+        while (msgProcThreadRunFlag) {
+            std::string msg = session.recvMsg();
             std::string event;
             std::map<std::string, std::string> data;
             doMsgParse(msg, event, data);
@@ -88,23 +96,35 @@ private:
             // 布隆过滤器默认配置
             if (event == "bloom_filter_default_config") {
                 getBFDefaultConfigProm.set_value(data);
-                continue;
             }
-
-            // std::cout << event << std::endl;
         }
     }
 
     // 发送 get_bloom_filter_default_config 消息，查询布隆过滤器默认配置
-    std::promise<std::map<std::string, std::string>> getBFDefaultConfigProm;
+    std::promise<std::map<std::string, std::string> > getBFDefaultConfigProm;
 
     std::map<std::string, std::string> getBFDefaultConfig() {
         const std::string event = "get_bloom_filter_default_config";
         std::map<std::string, std::string> data;
         data["client_uid"] = config.at("client_uid");
         const std::string msg = doMsgAssembly(event, data);
-        conn.asyncSendMsg(msg);
-        return getBFDefaultConfigProm.get_future().get();
+        session.asyncSendMsg(msg);
+        return getBFDefaultConfigProm.get_future().get(); // 等待这个 Promise 对象完成再返回
+    }
+
+    // 发送心跳包线程
+    std::atomic<bool> keepaliveThreadRunFlag{false};
+    std::thread keepaliveThread;
+
+    void keepaliveWorker(const unsigned int interval) const {
+        while (keepaliveThreadRunFlag) {
+            std::this_thread::sleep_for(std::chrono::seconds(interval));
+            const std::string event = "keepalive";
+            std::map<std::string, std::string> data;
+            data["client_uid"] = config.at("client_uid");
+            const std::string msg = doMsgAssembly(event, data);
+            session.asyncSendMsg(msg);
+        }
     }
 
     // 节点状态上报线程
@@ -129,7 +149,7 @@ private:
             data["black_list_msg_num"] = vectorToString(engine->getBlackListMsgNum()); // n^jwt_(i-1,j)
 
             const std::string msg = doMsgAssembly(event, data);
-            conn.asyncSendMsg(msg);
+            session.asyncSendMsg(msg);
         }
     }
 };

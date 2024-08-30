@@ -1,13 +1,13 @@
 #include <iostream>
 
 #include "detail/Utils/ConfigReader.hpp"
-#include "detail/MasterConnector/MasterConnector.hpp"
+#include "detail/TcpSession/TcpSession.hpp"
 #include "detail/Scheduler/Scheduler.hpp"
 #include "detail/Engine/Engine.hpp"
-#include "detail/Server/Server.hpp"
+// #include "detail/Server/Server.hpp"
 
 
-int main(int argc, char* argv[]) {
+int main(const int argc, char* argv[]) {
     std::string configFilePath = R"(C:\MyProjects\JWTRevoker_BlackList_cpp\src\config.txt)"; // 默认配置文件路径
 
     // 解析命令行参数，查找 "-c" 参数来获取配置文件路径
@@ -28,16 +28,17 @@ int main(int argc, char* argv[]) {
     std::cout << "Starting..." << std::endl;
 
     // 连接到master服务器
-    MasterConnector conn(config);
+
+    TcpSession session(config);
 
     // 初始化调度器
-    const Scheduler scheduler(config, conn);
+    const Scheduler scheduler(config, session);
 
     // 初始化引擎
-    Engine* engine = scheduler.getEngine();
+    const Engine* engine = scheduler.getEngine();
 
     // 启动服务
-    Server s(config, engine);
+    // Server s(config, engine);
     // s.exec();
 
     std::cout << "Service is Running." << std::endl;

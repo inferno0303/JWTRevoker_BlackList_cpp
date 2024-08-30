@@ -7,8 +7,7 @@
 #include <map>
 
 #include "../Utils/StringParser.hpp"
-#include "../Utils/NetworkUtils/TCPMsgHub.hpp"
-#include "../Utils/NetworkUtils/MsgFormatter.hpp"
+#include "../Utils/MsgFormatter.hpp"
 #include "../Engine/Engine.hpp"
 
 class Server {

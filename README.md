@@ -6,7 +6,7 @@
 
 createTime: 2024-06-06
 
-updateTIme: 2024-08-07
+updateTIme: 2024-08-30
 
 # 介绍
 
@@ -22,14 +22,12 @@ updateTIme: 2024-08-07
 
 ## 第三方库
 
-JSON library for C++ nlohmann/json: https://github.com/nlohmann/json
-
+boost.org
 
 ## 编译方法
 
 ```bash
-
-g++ main.cpp src/BloomFilter/BloomFilter.cpp -o main.exe; .\main.exe
+cmake .
 ```
 
 ## 运行方法
@@ -61,5 +59,9 @@ g++ main.cpp src/BloomFilter/BloomFilter.cpp -o main.exe; .\main.exe
 - 存档
 
 ### 2024-08-07
+
+- 存档
+
+### 2024-08-30
 
 - 存档

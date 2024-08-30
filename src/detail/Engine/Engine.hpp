@@ -13,7 +13,7 @@
 #include <thread>
 
 #include "../Utils/ConfigReader.hpp"
-#include "../Utils/ThreadingUtils/ThreadSafeQueue.hpp"
+#include "../Utils/ThreadSafeQueue.hpp"
 
 #include "BaseBloomFilter.hpp"
 
