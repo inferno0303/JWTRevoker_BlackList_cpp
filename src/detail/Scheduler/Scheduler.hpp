@@ -4,12 +4,12 @@
 #include <map>
 #include <string>
 #include "../Engine/Engine.hpp"
-#include "../TcpSession/TcpSession.hpp"
+#include "../MasterSession/MasterSession.hpp"
 
 class Scheduler {
 public:
-    explicit Scheduler(const std::map<std::string, std::string> &config_, TcpSession &session_)
-        : config(config_), session(session_) {
+    explicit Scheduler(const std::map<std::string, std::string> &config_, MasterSession &session_, Engine &engine_)
+        : config(config_), session(session_), engine(engine_) {
         // 查询布隆过滤器默认设置
         std::map<std::string, std::string> data;
         data["client_uid"] = config.at("client_uid");
@@ -27,11 +27,16 @@ public:
             const size_t bloomFilterSize = stringToSizeT(data_.at("bloom_filter_size"));
             const unsigned int hashFunctionNum = stringToUInt(data_.at("hash_function_num"));
 
-            // 初始化引擎
-            std::cout << std::endl << "Initializing Bloom filter engine..." << std::endl;
-            engine = new Engine(config, maxJwtLifeTime, rotationInterval, bloomFilterSize, hashFunctionNum);
-        } else throw std::runtime_error("Get bloom filter default config failed.");
+            std::cout << "[Scheduler] " << "maxJwtLifeTime: " << maxJwtLifeTime << ", rotationInterval: " <<
+                    rotationInterval << ", bloomFilterSize: " << bloomFilterSize << ", hashFunctionNum: " <<
+                    hashFunctionNum << std::endl;
 
+            std::cout << "[Scheduler] " << "Bloom filter memory used: " << std::ceil(maxJwtLifeTime / rotationInterval)
+                    * static_cast<unsigned long>(bloomFilterSize) / 8388608 << " MBytes" << std::endl;
+
+            // 初始化引擎
+            engine.init(maxJwtLifeTime, rotationInterval, bloomFilterSize, hashFunctionNum);
+        } else throw std::runtime_error("Get bloom filter default config failed.");
 
         // 启动处理消息线程
         if (!msgProcThread.joinable()) {
@@ -66,19 +71,12 @@ public:
         // 停止节点状态上报线程
         nodeStatusReportThreadRunFlag.store(false);
         if (nodeStatusReportThread.joinable()) nodeStatusReportThread.join();
-
-        // 清理引擎
-        free(engine);
     }
-
-    [[nodiscard]] Engine *getEngine() const { return engine; }
 
 private:
     const std::map<std::string, std::string> &config;
-    TcpSession &session;
-
-    // 引擎
-    Engine *engine = nullptr;
+    MasterSession &session;
+    Engine &engine;
 
     // 处理消息线程
     std::atomic<bool> msgProcThreadRunFlag{false};
@@ -94,14 +92,26 @@ private:
             if (event == "revoke_jwt") {
                 const std::string token = data["token"];
                 const std::string expTime = data["exp_time"];
-                engine->revokeJwt(token, stringToTimestamp(expTime));
-                engine->logRevoke(token, stringToTimestamp(expTime));
+                engine.revokeJwt(token, stringToTimestamp(expTime));
+                engine.logRevoke(token, stringToTimestamp(expTime));
                 std::cout << "[revoke_jwt] " << token << std::endl;
                 continue;
             }
 
             // 调整参数，并重建布隆过滤器
             if (event == "adjust_bloom_filter") {
+                const unsigned int maxJwtLifeTime = stringToUInt(data.at("max_jwt_life_time"));
+                const unsigned int rotationInterval = stringToUInt(data.at("rotation_interval"));
+                const size_t bloomFilterSize = stringToSizeT(data.at("bloom_filter_size"));
+                const unsigned int hashFunctionNum = stringToUInt(data.at("hash_function_num"));
+                std::cout << "[Scheduler] " << "maxJwtLifeTime: " << maxJwtLifeTime << ", rotationInterval: "
+                        << rotationInterval << ", bloomFilterSize: " << bloomFilterSize << ", hashFunctionNum: " <<
+                        hashFunctionNum << std::endl;
+                std::cout << "[Scheduler] " << "Bloom filter memory used: " <<
+                        std::ceil(maxJwtLifeTime / rotationInterval) * static_cast<unsigned long>(bloomFilterSize) /
+                        8388608 << " MBytes" << std::endl;
+                engine.adjustFiltersParam(maxJwtLifeTime, rotationInterval, bloomFilterSize, hashFunctionNum);
+                continue;
             }
         }
     }
@@ -131,12 +141,12 @@ private:
             const std::string event = "node_status";
             std::map<std::string, std::string> data;
             data["client_uid"] = config.at("client_uid");
-            data["max_jwt_life_time"] = std::to_string(engine->getMaxJwtLifeTime()); // T^max_i
-            data["rotation_interval"] = std::to_string(engine->getRotationInterval()); // T^w_i
-            data["bloom_filter_size"] = std::to_string(engine->getBloomFilterSize()); // m^bf_i
-            data["hash_function_num"] = std::to_string(engine->getHashFunctionNum()); // k^hash_i
-            data["bloom_filter_num"] = std::to_string(engine->getBloomFilterNum()); // n^bf_i
-            data["black_list_msg_num"] = vectorToString(engine->getBlackListMsgNum()); // n^jwt_(i-1,j)
+            data["max_jwt_life_time"] = std::to_string(engine.getMaxJwtLifeTime()); // T^max_i
+            data["rotation_interval"] = std::to_string(engine.getRotationInterval()); // T^w_i
+            data["bloom_filter_size"] = std::to_string(engine.getBloomFilterSize()); // m^bf_i
+            data["hash_function_num"] = std::to_string(engine.getHashFunctionNum()); // k^hash_i
+            data["bloom_filter_num"] = std::to_string(engine.getBloomFilterNum()); // n^bf_i
+            data["black_list_msg_num"] = vectorToString(engine.getBlackListMsgNum()); // n^jwt_(i-1,j)
             const std::string msg = doMsgAssembly(event, data);
             session.asyncSendMsg(msg);
         }

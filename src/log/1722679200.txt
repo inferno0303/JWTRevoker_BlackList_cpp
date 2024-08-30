@@ -1,2 +1,0 @@
-Rotate bloom filter at time: 1722680970, black list memory used: 10MBytes
-Rotate bloom filter at time: 1722680980, black list memory used: 10MBytes

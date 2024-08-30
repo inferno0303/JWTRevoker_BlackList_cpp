@@ -10,9 +10,9 @@
 #include "../Utils/MsgFormatter.hpp"
 
 
-class TcpSession {
+class MasterSession {
 public:
-    explicit TcpSession(const std::map<std::string, std::string> &config) : config_(config) {
+    explicit MasterSession(const std::map<std::string, std::string> &config) : config_(config) {
         // 读取配置
         host_ = config.at("master_ip");
         port_ = stringToUShort(config_.at("master_port"));
@@ -21,12 +21,12 @@ public:
         watchDogRunFlag.store(true);
         sendRunFlag.store(true);
         recvRunFlag.store(true);
-        watchDogThread = std::thread(&TcpSession::watchDog, this);
-        sendThread = std::thread(&TcpSession::send, this);
-        recvThread = std::thread(&TcpSession::recv, this);
+        watchDogThread = std::thread(&MasterSession::watchDog, this);
+        sendThread = std::thread(&MasterSession::send, this);
+        recvThread = std::thread(&MasterSession::recv, this);
     }
 
-    ~TcpSession() {
+    ~MasterSession() {
         watchDogRunFlag.store(false);
         sendRunFlag.store(false);
         recvRunFlag.store(false);
@@ -81,8 +81,8 @@ private:
                 connect(); // 重新连接
                 sendRunFlag.store(true);
                 recvRunFlag.store(true);
-                sendThread = std::thread(&TcpSession::send, this);
-                recvThread = std::thread(&TcpSession::recv, this);
+                sendThread = std::thread(&MasterSession::send, this);
+                recvThread = std::thread(&MasterSession::recv, this);
             }
         }
     }
@@ -95,7 +95,7 @@ private:
             boost::system::error_code ec;
             const auto connected_endpoint = boost::asio::connect(sock, endpoints, ec);
             if (!ec) {
-                std::cout << "Master connected " << connected_endpoint << std::endl;
+                std::cout << "[Master connection] Master connected " << connected_endpoint << std::endl;
 
                 // 发送认证请求
                 const std::string event = "hello_from_client";
@@ -133,12 +133,12 @@ private:
                 doMsgParse(std::string(msgBody), event_, data_);
 
                 if (event_ == "auth_success") {
-                    std::cout << "Master Authenticate success" << std::endl;
+                    std::cout << "[Master connection] Master Authenticate success" << std::endl;
                     break;
                 }
                 if (event_ == "auth_failed") throw std::runtime_error("Authenticate failed.");
             }
-            std::cerr << "Failed to connect: " << ec.message() << std::endl;
+            std::cerr << "[Master connection] connection lost, try again after 5 sec: " << ec.message() << std::endl;
             std::this_thread::sleep_for(std::chrono::seconds(5)); // 等待5秒再尝试重新连接
         }
     }

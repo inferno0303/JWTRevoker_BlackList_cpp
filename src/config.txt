@@ -12,7 +12,7 @@ node_status_report_interval = 10
 
 # listen
 server_ip = 127.0.0.1
-server_port = 9998
+server_port = 8888
 
 # log file path
 log_file_path = C:\MyProjects\JWTRevoker_BlackList_cpp\src\log

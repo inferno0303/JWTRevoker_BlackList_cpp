@@ -17,7 +17,8 @@ add_executable(JWTRevoker_BlackList
         src/detail/Utils/ConfigReader.hpp
         src/detail/Utils/MsgFormatter.hpp
         src/detail/Server/Server.hpp
-        src/detail/TcpSession/TcpSession.hpp
+        src/detail/MasterSession/MasterSession.hpp
+        src/detail/Server/TCPServer.hpp
 )
 
 

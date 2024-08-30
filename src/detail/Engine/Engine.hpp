@@ -15,39 +15,52 @@
 #include "../Utils/ThreadSafeQueue.hpp"
 
 
-inline std::vector<BaseBloomFilter> initFilters(const unsigned int &filtersNum,
-                                                const unsigned int &bloomFilterSize,
-                                                const unsigned int &hashFunctionNum) {
+inline std::vector<BaseBloomFilter> getNewFilters(const unsigned int &filtersNum,
+                                                  const unsigned int &bloomFilterSize,
+                                                  const unsigned int &hashFunctionNum) {
     std::vector<BaseBloomFilter> newFilters;
     newFilters.reserve(filtersNum);
     for (unsigned int i = 0; i < filtersNum; ++i) { newFilters.emplace_back(bloomFilterSize, hashFunctionNum); }
     return newFilters;
 }
 
-inline void printLogo() {
-    std::cout << R"(
+inline void printLogo(const float totalSize) {
+    const auto logo = R"(
           ____  _                         ______ _ _ _
          |  _ \| |                       |  ____(_) | |
          | |_) | | ___   ___  _ __ ___   | |__   _| | |_ ___ _ __ ___
          |  _ <| |/ _ \ / _ \| '_ ` _ \  |  __| | | | __/ _ \ '__/ __|
          | |_) | | (_) | (_) | | | | | | | |    | | | ||  __/ |  \__ \
-         |____/|_|\___/ \___/|_| |_| |_| |_|    |_|_|\__\___|_|  |___/  v0.1
-        )" << std::endl;
+         |____/|_|\___/ \___/|_| |_| |_| |_|    |_|_|\__\___|_|  |___/  )";
+    std::cout << logo;
+    std::cout << " Memory used: " << totalSize << " MBytes" << std::endl << std::endl;
 }
 
 
 class Engine {
 public:
-    explicit Engine(const std::map<std::string, std::string> &_config,
-                    const unsigned int &_maxJwtLifeTime,
-                    const unsigned int &_rotationInterval,
-                    const size_t &_bloomFilterSize,
-                    const unsigned int &_hashFunctionNum)
-        : config(_config) {
-        if (_maxJwtLifeTime == 0) { throw std::invalid_argument("maxJwtLifeTime cannot be 0."); }
-        if (_rotationInterval == 0) { throw std::invalid_argument("rotationInterval cannot be 0."); }
-        if (_bloomFilterSize == 0) { throw std::invalid_argument("bloomFilterSize cannot be 0."); }
-        if (_hashFunctionNum == 0) { throw std::invalid_argument("hashFunctionNum cannot be 0."); }
+    explicit Engine(const std::map<std::string, std::string> &_config) : config(_config) {
+    }
+
+    ~Engine() {
+        // 停止周期轮换线程
+        rotateFiltersRunFlag.store(false);
+        if (rotateFiltersThread.joinable()) { rotateFiltersThread.join(); }
+
+        // 释放布隆过滤器
+        filters.clear();
+
+        // 停止日志记录线程
+        logRunFlag.store(false);
+        if (logThread.joinable()) { logThread.join(); }
+    }
+
+    void init(const unsigned int _maxJwtLifeTime, const unsigned int _rotationInterval, const size_t _bloomFilterSize,
+              const unsigned int _hashFunctionNum) {
+        if (_maxJwtLifeTime == 0) throw std::invalid_argument("maxJwtLifeTime cannot be 0.");
+        if (_rotationInterval == 0) throw std::invalid_argument("rotationInterval cannot be 0.");
+        if (_bloomFilterSize == 0) throw std::invalid_argument("bloomFilterSize cannot be 0.");
+        if (_hashFunctionNum == 0) throw std::invalid_argument("hashFunctionNum cannot be 0.");
         maxJwtLifeTime = _maxJwtLifeTime;
         rotationInterval = _rotationInterval;
         bloomFilterSize = _bloomFilterSize;
@@ -56,15 +69,20 @@ public:
         // 计算所需布隆过滤器的个数
         filtersNum = std::ceil(maxJwtLifeTime / rotationInterval);
 
-        // 初始化
-        filters = initFilters(filtersNum, bloomFilterSize, hashFunctionNum);
+        std::cout << "[Engine] Initializing bloom filter engine..." << std::endl;
 
-        // 从日志中恢复记录
-        recoverFromLog();
+        // 初始化过滤器
+        auto _filters = getNewFilters(filtersNum, bloomFilterSize, hashFunctionNum);
+
+        // 从日志中恢复记录到过滤器中
+        recoverFromLog(_filters);
+
+        filters.clear();
+        filters = _filters;
 
         // 启动周期轮换线程
         if (!rotateFiltersThread.joinable()) {
-            rotateFiltersThreadRunFlag.store(true);
+            rotateFiltersRunFlag.store(true);
             rotateFiltersThread = std::thread(&Engine::rotateBloomFilterWorker, this);
         }
 
@@ -74,20 +92,35 @@ public:
             logThread = std::thread(&Engine::logWorker, this);
         }
 
-        printLogo();
+        printLogo(static_cast<float>(filtersNum * bloomFilterSize) / 8388608);
     }
 
-    ~Engine() {
-        // 停止周期轮换线程
-        rotateFiltersThreadRunFlag.store(false);
-        if (rotateFiltersThread.joinable()) { rotateFiltersThread.join(); }
+    // 重建布隆过滤器（布隆过滤器参数改变，需要重建）
+    void adjustFiltersParam(const unsigned int _maxJwtLifeTime, const unsigned int _rotationInterval,
+                            const size_t _bloomFilterSize, const unsigned int _hashFunctionNum) {
+        maxJwtLifeTime = _maxJwtLifeTime;
+        rotationInterval = _rotationInterval;
+        bloomFilterSize = _bloomFilterSize;
+        hashFunctionNum = _hashFunctionNum;
 
-        // 释放布隆过滤器
+        // 计算所需布隆过滤器的个数
+        filtersNum = std::ceil(maxJwtLifeTime / rotationInterval);
+
+        std::cout << "[Engine] Adjust bloom filter engine..." << std::endl;
+
+        // 初始化过滤器
+        auto _filters = getNewFilters(filtersNum, bloomFilterSize, hashFunctionNum);
+
+        // 从日志中恢复记录到过滤器中
+        recoverFromLog(_filters);
+
+        printLogo(static_cast<float>(filtersNum * bloomFilterSize) / 8388608);
+
+        std::unique_lock lock(filtersMtx);
         filters.clear();
-
-        // 停止日志记录线程
-        logRunFlag.store(false);
-        if (logThread.joinable()) { logThread.join(); }
+        filters = _filters;
+        lock.unlock();
+        adjustFiltersCv.notify_all(); // 通知周期轮换线程，重新等待轮换计时
     }
 
     // 写入布隆过滤器
@@ -103,11 +136,11 @@ public:
         if (remainingTime > maxJwtLifeTime) return;
 
         // 计算需要写入到多少个布隆过滤器中
-        const unsigned int num = std::ceil(remainingTime / this->rotationInterval);
+        const unsigned int num = std::ceil(remainingTime / rotationInterval);
         if (num > filtersNum) return;
 
         // 分别写入到多个布隆过滤器中
-        for (unsigned int i = 0; i < num; ++i) { filters[i].add(token); }
+        for (unsigned int i = 0; i < num; ++i) filters[i].add(token);
     }
 
     // 查询是否在布隆过滤器中
@@ -123,7 +156,7 @@ public:
         if (remainingTime > maxJwtLifeTime) return false;
 
         // 计算需要查询多少个布隆过滤器
-        const unsigned int num = std::ceil(remainingTime / this->rotationInterval);
+        const unsigned int num = std::ceil(remainingTime / rotationInterval);
         if (num > filtersNum) return false;
 
         // 分别查询多个布隆过滤器中
@@ -140,16 +173,11 @@ public:
         logQueue.enqueue(token + "," + std::to_string(expTime));
     }
 
-
     // getter方法，用于节点状态上报
     unsigned long getMaxJwtLifeTime() const { return maxJwtLifeTime; }
-
     unsigned long getRotationInterval() const { return rotationInterval; }
-
     size_t getBloomFilterSize() const { return bloomFilterSize; }
-
     unsigned int getHashFunctionNum() const { return hashFunctionNum; }
-
     unsigned int getBloomFilterNum() const { return filtersNum; }
 
     std::vector<unsigned long> getBlackListMsgNum() const {
@@ -160,26 +188,15 @@ public:
     }
 
 private:
-    // 配置
     const std::map<std::string, std::string> &config;
-
-    // 布隆过滤器
-    std::vector<BaseBloomFilter> filters;
-
-    // jwt最大生存时长
-    unsigned long maxJwtLifeTime = 0;
-
-    // 周期轮换间隔
-    unsigned long rotationInterval = 0;
-
-    // 每个布隆过滤器尺寸
-    size_t bloomFilterSize = 0;
-
-    // 哈希函数个数
-    unsigned int hashFunctionNum = 0;
-
-    // 布隆过滤器个数
-    unsigned int filtersNum = 0;
+    std::vector<BaseBloomFilter> filters; // 布隆过滤器数组
+    unsigned long maxJwtLifeTime = 0; // jwt最大生存时长
+    unsigned long rotationInterval = 0; // 周期轮换间隔
+    size_t bloomFilterSize = 0; // 每个布隆过滤器尺寸
+    unsigned int hashFunctionNum = 0; // 哈希函数个数
+    unsigned int filtersNum = 0; // 布隆过滤器个数
+    std::mutex filtersMtx; // 布隆过滤器读写锁（重建过程中，禁止读写）
+    std::condition_variable adjustFiltersCv; // 用于调整布隆过滤器参数后的条件变量（通知周期轮换线程）
 
     // 持久化线程
     ThreadSafeQueue<std::string> logQueue{}; // 日志队列
@@ -210,7 +227,7 @@ private:
     }
 
     // 从日志中恢复
-    void recoverFromLog() {
+    void recoverFromLog(std::vector<BaseBloomFilter> &_filters) const {
         // 计算当前时刻的整点时间戳
         const std::time_t now_c = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
         std::tm *tm = std::localtime(&now_c);
@@ -248,69 +265,69 @@ private:
         for (const auto &it: foundFiles) {
             std::ifstream file(it);
             if (!file.is_open()) {
-                std::cerr << "Error opening file: " << it << std::endl;
+                std::cerr << "[Engine] Error opening file: " << it << std::endl;
                 return;
             }
             std::string line;
             while (std::getline(file, line)) {
                 std::istringstream iss(line);
 
-                // 解析 UUID 字符串
+                // 解析 token 字符串
                 if (std::string token; std::getline(iss, token, ',')) {
-                    // 解析时间戳
+                    // 解析 expTime（字符串）
                     if (std::string expTimeStr; std::getline(iss, expTimeStr)) {
                         auto expTime = static_cast<time_t>(std::stol(expTimeStr));
-                        this->revokeJwt(token, expTime);
-                        readBytes += 49;
-                        if (readBytes % 490000 == 0) {
+
+                        // 写入布隆过滤器
+                        const time_t remainingTime = expTime - std::chrono::system_clock::to_time_t(
+                                                         std::chrono::system_clock::now()); // 计算这个 token 还剩多长时间过期
+                        if (remainingTime <= 0) continue;
+                        if (remainingTime > maxJwtLifeTime) continue;
+
+                        // 计算需要写入到多少个布隆过滤器中
+                        const unsigned int num = std::ceil(remainingTime / rotationInterval);
+                        if (num > filtersNum) continue;
+
+                        // 分别写入到多个布隆过滤器中
+                        for (unsigned int i = 0; i < num; ++i) _filters[i].add(token);
+
+                        // 显示进度
+                        readBytes += 49; // 每行是一条记录，一条记录 49 bytes
+                        if (readBytes % 4900000 == 0) {
                             float p = static_cast<float>(readBytes) / static_cast<float>(fileSizes) * 100;
-                            std::cout << "[Recovery] recover from log, process: " << p << "%" << std::endl;
+                            std::cout << "[Engine] Recover from log: " << p << "%" << std::endl;
                         }
                     }
                 }
             }
             file.close();
         }
-        std::cout << "[Recovery] recover from log done, total is " << fileSizes / 49 << std::endl;
-    }
-
-    // 重建布隆过滤器要用到的锁
-    std::mutex filtersMtx;
-
-    // 重建布隆过滤器（布隆过滤器参数改变，需要重建）
-    void rebuildFilters() {
-        std::unique_lock<std::mutex> lock(filtersMtx);
-        // 返回布隆过滤器
+        std::cout << "[Engine] Recover from log is done, " << fileSizes / 49 << " items have been loaded." << std::endl;
     }
 
     // 周期轮换线程
-    std::mutex mtx; // 用于轮换间隔被改变时的通知
-    std::condition_variable cv; // 用于轮换间隔被改变时的通知
-    bool intervalChange = false; // 用于轮换间隔被改变时的通知
-    std::atomic<bool> rotateFiltersThreadRunFlag{false};
+    std::atomic<bool> rotateFiltersRunFlag{false};
     std::thread rotateFiltersThread;
 
     void rotateBloomFilterWorker() {
-        while (rotateFiltersThreadRunFlag) {
-            std::unique_lock<std::mutex> lock(mtx);
+        while (rotateFiltersRunFlag) {
+            std::unique_lock lock(filtersMtx);
 
-            // 等待条件变量，但最多等待 rotationInterval 秒
-            if (cv.wait_for(lock, std::chrono::seconds(rotationInterval), [this] { return intervalChange; })) {
-                // 周期轮换间隔被更改，说明布隆过滤器被重置了，要重置周期轮换等待时间
-                std::cout << "Rotation interval has been changed." << std::endl;
-                intervalChange = false;
+            // 等待条件变量，但最多等待 rotationInterval 秒，期间等待 adjustBloomFilterCv 条件变量被通知
+            if (adjustFiltersCv.wait_for(lock, std::chrono::seconds(rotationInterval)) == std::cv_status::no_timeout) {
+                // 条件变量被通知，说明布隆过滤器参数已被更改，要重新计算周期轮换等待时间
+                std::cout << "[Engine] Bloom filter parameter has been changed, rotation interval is recalculated." <<
+                        std::endl;
             } else {
                 // 等待超时，执行周期轮换
-                std::unique_lock<std::mutex> _lock(filtersMtx);
                 filters.erase(filters.begin());
                 filters.emplace_back(bloomFilterSize, hashFunctionNum);
-                _lock.unlock();
+                lock.unlock();
 
                 // 打印信息
                 const auto now_c = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
                 std::ostringstream oss;
-                oss << "Rotate bloom filter at time: " << now_c << ", memory used: " << filtersNum * bloomFilterSize / 8
-                        / 1024 / 1024 << "MBytes";
+                oss << "[Engine] Rotate bloom filter at time: " << now_c;
                 std::cout << oss.str() << std::endl;
             }
         }

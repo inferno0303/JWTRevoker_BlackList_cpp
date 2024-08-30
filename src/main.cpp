@@ -1,10 +1,10 @@
 #include <iostream>
 
 #include "detail/Utils/ConfigReader.hpp"
-#include "detail/TcpSession/TcpSession.hpp"
-#include "detail/Scheduler/Scheduler.hpp"
 #include "detail/Engine/Engine.hpp"
-// #include "detail/Server/Server.hpp"
+#include "detail/MasterSession/MasterSession.hpp"
+#include "detail/Scheduler/Scheduler.hpp"
+#include "detail/Server/TCPServer.hpp"
 
 
 int main(const int argc, char* argv[]) {
@@ -25,23 +25,18 @@ int main(const int argc, char* argv[]) {
     // 读取配置文件
     const std::map<std::string, std::string> config = readConfig(configFilePath);
 
-    // 连接到master服务器
+    // 连接到 Master 服务器
+    MasterSession session(config);
 
-    TcpSession session(config);
+    // 启动引擎
+    Engine engine(config);
 
-    // 初始化调度器
-    const Scheduler scheduler(config, session);
+    // 启动调度器
+    const Scheduler scheduler(config, session, engine);
 
-    // 初始化引擎
-    const Engine* engine = scheduler.getEngine();
-
-    // 启动服务
-    // Server s(config, engine);
-    // s.exec();
-
-    std::cout << "Service is Running." << std::endl;
-
-    std::getchar();
+    // 启动对外服务
+    TCPServer server(config, engine);
+    server.run();
 
     return 0;
 }
