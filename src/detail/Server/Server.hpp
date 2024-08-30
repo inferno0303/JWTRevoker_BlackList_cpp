@@ -127,7 +127,7 @@ private:
                 if (event == "query") {
                     const std::string token = data["token"];
                     const std::string expTime = data["exp_time"];
-                    const bool result = engine->contain(token, stringToTimestamp(expTime));
+                    const bool result = engine->isRevoke(token, stringToTimestamp(expTime));
                     if (result) { data["result"] = "yes"; }
                     else { data["result"] = "no"; }
                     const std::string replyMsg = doMsgAssembly("query_result", data);

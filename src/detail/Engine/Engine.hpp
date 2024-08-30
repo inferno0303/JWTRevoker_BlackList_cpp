@@ -1,39 +1,48 @@
 #ifndef BLACK_LIST_ENGINE_HPP
 #define BLACK_LIST_ENGINE_HPP
 
-#include <atomic>
 #include <iostream>
 #include <vector>
 #include <cmath>
 #include <string>
 #include <chrono>
-#include <future>
-#include <mutex>
-#include <sstream>
+#include <atomic>
 #include <thread>
-
+#include <set>
+#include <filesystem>
+#include "BaseBloomFilter.hpp"
 #include "../Utils/ConfigReader.hpp"
 #include "../Utils/ThreadSafeQueue.hpp"
 
-#include "BaseBloomFilter.hpp"
 
-inline std::vector<BaseBloomFilter> initFilters(const unsigned int& filtersNum,
-                                                const unsigned int& bloomFilterSize,
-                                                const unsigned int& hashFunctionNum) {
+inline std::vector<BaseBloomFilter> initFilters(const unsigned int &filtersNum,
+                                                const unsigned int &bloomFilterSize,
+                                                const unsigned int &hashFunctionNum) {
     std::vector<BaseBloomFilter> newFilters;
     newFilters.reserve(filtersNum);
     for (unsigned int i = 0; i < filtersNum; ++i) { newFilters.emplace_back(bloomFilterSize, hashFunctionNum); }
     return newFilters;
 }
 
+inline void printLogo() {
+    std::cout << R"(
+          ____  _                         ______ _ _ _
+         |  _ \| |                       |  ____(_) | |
+         | |_) | | ___   ___  _ __ ___   | |__   _| | |_ ___ _ __ ___
+         |  _ <| |/ _ \ / _ \| '_ ` _ \  |  __| | | | __/ _ \ '__/ __|
+         | |_) | | (_) | (_) | | | | | | | |    | | | ||  __/ |  \__ \
+         |____/|_|\___/ \___/|_| |_| |_| |_|    |_|_|\__\___|_|  |___/  v0.1
+        )" << std::endl;
+}
+
 
 class Engine {
 public:
-    explicit Engine(const std::map<std::string, std::string>& _config,
-                    const unsigned int& _maxJwtLifeTime,
-                    const unsigned int& _rotationInterval,
-                    const size_t& _bloomFilterSize,
-                    const unsigned int& _hashFunctionNum)
+    explicit Engine(const std::map<std::string, std::string> &_config,
+                    const unsigned int &_maxJwtLifeTime,
+                    const unsigned int &_rotationInterval,
+                    const size_t &_bloomFilterSize,
+                    const unsigned int &_hashFunctionNum)
         : config(_config) {
         if (_maxJwtLifeTime == 0) { throw std::invalid_argument("maxJwtLifeTime cannot be 0."); }
         if (_rotationInterval == 0) { throw std::invalid_argument("rotationInterval cannot be 0."); }
@@ -50,6 +59,9 @@ public:
         // 初始化
         filters = initFilters(filtersNum, bloomFilterSize, hashFunctionNum);
 
+        // 从日志中恢复记录
+        recoverFromLog();
+
         // 启动周期轮换线程
         if (!rotateFiltersThread.joinable()) {
             rotateFiltersThreadRunFlag.store(true);
@@ -58,18 +70,11 @@ public:
 
         // 启动日志记录线程
         if (!logThread.joinable()) {
-            logThreadRunFlag.store(true);
-            logThread = std::thread(&Engine::logThreadWorker, this);
+            logRunFlag.store(true);
+            logThread = std::thread(&Engine::logWorker, this);
         }
 
-        std::cout << R"(
-          ____  _                         ______ _ _ _
-         |  _ \| |                       |  ____(_) | |
-         | |_) | | ___   ___  _ __ ___   | |__   _| | |_ ___ _ __ ___
-         |  _ <| |/ _ \ / _ \| '_ ` _ \  |  __| | | | __/ _ \ '__/ __|
-         | |_) | | (_) | (_) | | | | | | | |    | | | ||  __/ |  \__ \
-         |____/|_|\___/ \___/|_| |_| |_| |_|    |_|_|\__\___|_|  |___/
-        )" << std::endl;
+        printLogo();
     }
 
     ~Engine() {
@@ -81,12 +86,12 @@ public:
         filters.clear();
 
         // 停止日志记录线程
-        logThreadRunFlag.store(false);
+        logRunFlag.store(false);
         if (logThread.joinable()) { logThread.join(); }
     }
 
     // 写入布隆过滤器
-    void write(const std::string& token, const time_t& expTime) {
+    void revokeJwt(const std::string &token, const time_t &expTime) {
         // 计算这个 token 还剩多长时间过期
         const auto now_c = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
         const time_t remainingTime = expTime - now_c;
@@ -103,15 +108,10 @@ public:
 
         // 分别写入到多个布隆过滤器中
         for (unsigned int i = 0; i < num; ++i) { filters[i].add(token); }
-
-        // 持久化撤回记录
-        std::ostringstream oss;
-        oss << token << "," << expTime;
-        logQueue.enqueue(oss.str());
     }
 
     // 查询是否在布隆过滤器中
-    bool contain(const std::string& token, const time_t& expTime) const {
+    bool isRevoke(const std::string &token, const time_t &expTime) const {
         // 计算这个 token 还剩多长时间过期
         const auto now_c = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
         const time_t remainingTime = expTime - now_c;
@@ -135,6 +135,12 @@ public:
         return true;
     }
 
+    // 将撤回记录写入日志
+    void logRevoke(const std::string &token, const time_t &expTime) {
+        logQueue.enqueue(token + "," + std::to_string(expTime));
+    }
+
+
     // getter方法，用于节点状态上报
     unsigned long getMaxJwtLifeTime() const { return maxJwtLifeTime; }
 
@@ -149,13 +155,13 @@ public:
     std::vector<unsigned long> getBlackListMsgNum() const {
         std::vector<unsigned long> blackListMsgNum;
         blackListMsgNum.reserve(filtersNum);
-        for (const auto& baseBloomFilter : filters) { blackListMsgNum.push_back(baseBloomFilter.getMsgNum()); }
+        for (const auto &baseBloomFilter: filters) { blackListMsgNum.push_back(baseBloomFilter.getMsgNum()); }
         return blackListMsgNum;
     }
 
 private:
     // 配置
-    const std::map<std::string, std::string>& config;
+    const std::map<std::string, std::string> &config;
 
     // 布隆过滤器
     std::vector<BaseBloomFilter> filters;
@@ -176,38 +182,97 @@ private:
     unsigned int filtersNum = 0;
 
     // 持久化线程
-    ThreadSafeQueue<std::string> logQueue{409600}; // 日志队列
-    std::atomic<bool> logThreadRunFlag{false};
+    ThreadSafeQueue<std::string> logQueue{}; // 日志队列
+    std::atomic<bool> logRunFlag{false};
     std::thread logThread;
 
-    void logThreadWorker() {
-        std::string logFilePath = config.at("log_file_path");
-        while (logThreadRunFlag.load()) {
+    void logWorker() {
+        while (logRunFlag.load()) {
             // 从队列中取出消息
             std::string msg = logQueue.dequeue();
 
             // 计算当前时刻的整点时间戳
             const auto now_c = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
-            std::tm* tm = std::localtime(&now_c);
+            std::tm *tm = std::localtime(&now_c);
             tm->tm_min = 0; // 将分钟设为0
             tm->tm_sec = 0; // 将秒钟设为0
-            auto hourlyTimestamp = std::mktime(tm);
+            const auto hourlyTimestamp = std::mktime(tm);
 
             // 拼接文件名
-            std::ostringstream fileName;
-            fileName << logFilePath << "\\" << hourlyTimestamp << ".txt";
+            std::filesystem::path filePath = config.at("log_file_path");
+            filePath /= std::to_string(hourlyTimestamp) + ".txt"; // 拼接路径
 
             // 写入文件
-            std::ofstream logFile(fileName.str(), std::ios::app);
-            if (logFile.is_open()) { logFile << "[" << now_c << "]" << msg << std::endl; }
+            if (std::ofstream logFile(filePath, std::ios::app); logFile.is_open()) {
+                logFile << msg << std::endl;
+            }
         }
     }
 
-    // // 载入log记录到布隆过滤器
-    // void loadLogFile() {
-    //     std::string logFilePath = config.at("log_file_path");
-    //
-    // }
+    // 从日志中恢复
+    void recoverFromLog() {
+        // 计算当前时刻的整点时间戳
+        const std::time_t now_c = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
+        std::tm *tm = std::localtime(&now_c);
+        tm->tm_min = 0;
+        tm->tm_sec = 0;
+        std::time_t hourlyTimestamp = std::mktime(tm);
+
+        // 文件路径列表和文件大小列表
+
+        std::vector<std::filesystem::path> foundFiles;
+        size_t fileSizes = 0;
+
+        // 循环检查文件是否存在，并获取文件大小
+        for (int i = 0; i < 24; ++i) {
+            std::filesystem::path filePath = config.at("log_file_path");
+            filePath /= std::to_string(hourlyTimestamp) + ".txt"; // 拼接路径
+            if (exists(filePath)) {
+                foundFiles.push_back(filePath);
+                fileSizes += file_size(filePath);
+            }
+            hourlyTimestamp -= 3600; // 减去1小时
+        }
+
+        // 遍历目录中的所有文件
+        std::set foundFilesSet(foundFiles.begin(), foundFiles.end());
+        for (const auto &entry: std::filesystem::directory_iterator(config.at("log_file_path"))) {
+            if (entry.is_regular_file()) {
+                // 如果文件不在foundFiles中，删除它
+                if (!foundFilesSet.contains(entry.path())) std::filesystem::remove(entry.path());
+            }
+        }
+
+        // 逐步导入文件内容
+        size_t readBytes = 0;
+        for (const auto &it: foundFiles) {
+            std::ifstream file(it);
+            if (!file.is_open()) {
+                std::cerr << "Error opening file: " << it << std::endl;
+                return;
+            }
+            std::string line;
+            while (std::getline(file, line)) {
+                std::istringstream iss(line);
+
+                // 解析 UUID 字符串
+                if (std::string token; std::getline(iss, token, ',')) {
+                    // 解析时间戳
+                    if (std::string expTimeStr; std::getline(iss, expTimeStr)) {
+                        auto expTime = static_cast<time_t>(std::stol(expTimeStr));
+                        this->revokeJwt(token, expTime);
+                        readBytes += 49;
+                        if (readBytes % 490000 == 0) {
+                            float p = static_cast<float>(readBytes) / static_cast<float>(fileSizes) * 100;
+                            std::cout << "[Recovery] recover from log, process: " << p << "%" << std::endl;
+                        }
+                    }
+                }
+            }
+            file.close();
+        }
+        std::cout << "[Recovery] recover from log done, total is " << fileSizes / 49 << std::endl;
+    }
 
     // 重建布隆过滤器要用到的锁
     std::mutex filtersMtx;
@@ -234,8 +299,7 @@ private:
                 // 周期轮换间隔被更改，说明布隆过滤器被重置了，要重置周期轮换等待时间
                 std::cout << "Rotation interval has been changed." << std::endl;
                 intervalChange = false;
-            }
-            else {
+            } else {
                 // 等待超时，执行周期轮换
                 std::unique_lock<std::mutex> _lock(filtersMtx);
                 filters.erase(filters.begin());
@@ -246,7 +310,7 @@ private:
                 const auto now_c = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
                 std::ostringstream oss;
                 oss << "Rotate bloom filter at time: " << now_c << ", memory used: " << filtersNum * bloomFilterSize / 8
-                    / 1024 / 1024 << "MBytes";
+                        / 1024 / 1024 << "MBytes";
                 std::cout << oss.str() << std::endl;
             }
         }

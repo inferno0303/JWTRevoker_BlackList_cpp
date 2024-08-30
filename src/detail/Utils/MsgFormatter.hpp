@@ -36,7 +36,11 @@ inline void doMsgParse(const std::string &jsonStr, std::string &event, std::map<
                 try {
                     if (it.value().is_string()) {
                         data[it.key()] = boost::json::value_to<std::string>(it.value());
-                    } else if (it.value().is_number()) {
+                    } else if (it.value().is_int64()) {
+                        data[it.key()] = std::to_string(it.value().as_int64());
+                    } else if (it.value().is_uint64()) {
+                        data[it.key()] = std::to_string(it.value().as_uint64());
+                    } else if (it.value().is_double()) {
                         data[it.key()] = std::to_string(it.value().as_double());
                     } else if (it.value().is_bool()) {
                         data[it.key()] = it.value().as_bool() ? "true" : "false";

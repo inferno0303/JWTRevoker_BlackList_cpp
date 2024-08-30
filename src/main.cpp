@@ -25,8 +25,6 @@ int main(const int argc, char* argv[]) {
     // 读取配置文件
     const std::map<std::string, std::string> config = readConfig(configFilePath);
 
-    std::cout << "Starting..." << std::endl;
-
     // 连接到master服务器
 
     TcpSession session(config);
