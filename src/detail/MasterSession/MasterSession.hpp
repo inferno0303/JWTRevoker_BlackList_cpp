@@ -7,8 +7,39 @@
 #include <boost/asio.hpp>
 #include "../Utils/ThreadSafeQueue.hpp"
 #include "../Utils/StringParser.hpp"
-#include "../Utils/MsgFormatter.hpp"
+#include "../Utils/JsonStringMsg.hpp"
 
+using boost::asio::io_context;
+using boost::asio::awaitable;
+using boost::asio::use_awaitable;
+using boost::asio::ip::tcp;
+
+inline std::string recvMsgFromSocket(tcp::socket &sock) {
+    // 接收消息头
+    char msgHeaderBE[4]{};
+    boost::asio::read(sock, boost::asio::buffer(msgHeaderBE, 4));
+
+    // 网络字节序转为主机字节序
+    std::uint32_t msgBodyLength = 0;
+    std::memcpy(&msgBodyLength, msgHeaderBE, 4);
+    msgBodyLength = ntohl(msgBodyLength);
+
+    if (msgBodyLength == 0) return {};
+    std::vector<char> msgBody(msgBodyLength);
+    boost::asio::read(sock, boost::asio::buffer(msgBody.data(), msgBodyLength));
+    return {msgBody.begin(), msgBody.end()};
+}
+
+inline void sendMsgToSocket(tcp::socket &sock, const std::string &msg) {
+    if (msg.empty()) return ;
+    // 动态分配消息帧内存，包括 4 bytes 的消息长度和消息体
+    std::vector<char> msgFrame(4 + msg.size());
+    const auto msgLengthBE = htonl(msg.size());
+    std::memcpy(msgFrame.data(), &msgLengthBE, 4);
+    std::memcpy(msgFrame.data() + 4, msg.data(), msg.size());
+
+    boost::asio::write(sock, boost::asio::buffer(msgFrame, 4 + msg.size()));
+}
 
 class MasterSession {
 public:
@@ -47,8 +78,8 @@ private:
     std::string host_;
     unsigned short port_;
 
-    boost::asio::io_context io_context_;
-    boost::asio::ip::tcp::socket sock{io_context_};
+    io_context io_context_;
+    tcp::socket sock{io_context_};
 
     // 消息发送队列、消息接收队列
     ThreadSafeQueue<std::string> sendQueue{};
@@ -88,21 +119,21 @@ private:
     }
 
     void connect() {
-        boost::asio::ip::tcp::resolver resolver(io_context_);
+        tcp::resolver resolver(io_context_);
         const auto endpoints = resolver.resolve(host_, std::to_string(port_));
 
         while (true) {
             boost::system::error_code ec;
             const auto connected_endpoint = boost::asio::connect(sock, endpoints, ec);
             if (!ec) {
-                std::cout << "[Master connection] Master connected " << connected_endpoint << std::endl;
+                std::cout << "[Master connection] Master connected: " << connected_endpoint << std::endl;
 
                 // 发送认证请求
                 const std::string event = "hello_from_client";
                 std::map<std::string, std::string> data;
                 data["client_uid"] = config_.at("client_uid");
                 data["token"] = config_.at("token");
-                const std::string msg = doMsgAssembly(event, data);
+                const std::string msg = msgAssembly(event, data);
 
                 // 构建消息帧，包含4字节长度字段和消息体
                 char msgFrame[4 + msg.size() + 1]{};
@@ -130,7 +161,7 @@ private:
                 // 解析消息体
                 std::string event_;
                 std::map<std::string, std::string> data_;
-                doMsgParse(std::string(msgBody), event_, data_);
+                msgParse(std::string(msgBody), event_, data_);
 
                 if (event_ == "auth_success") {
                     std::cout << "[Master connection] Master Authenticate success" << std::endl;
@@ -146,16 +177,7 @@ private:
     void send() {
         while (sendRunFlag.load()) {
             try {
-                const std::string msg = sendQueue.dequeue();
-                if (msg.empty()) { continue; }
-
-                // 构建消息帧，包含4字节长度字段和消息体
-                char msgFrame[4 + msg.size() + 1]{};
-                auto msgLengthBE = htonl(msg.size());
-                std::memcpy(msgFrame, &msgLengthBE, 4);
-                std::memcpy(msgFrame + 4, msg.data(), msg.length());
-
-                boost::asio::write(sock, boost::asio::buffer(msgFrame, 4 + msg.size()));
+                sendMsgToSocket(sock, sendQueue.dequeue());
             } catch (const std::exception &e) {
                 connErrFlag = true;
                 std::cerr << "Send Error: " << e.what() << std::endl;
@@ -167,21 +189,7 @@ private:
     void recv() {
         while (recvRunFlag.load()) {
             try {
-                // 接收消息头
-                char msgHeaderBE[4]{};
-                boost::asio::read(sock, boost::asio::buffer(msgHeaderBE, 4));
-
-                // 网络字节序转为主机字节序
-                std::uint32_t msgBodyLength = 0;
-                std::memcpy(&msgBodyLength, msgHeaderBE, 4);
-                msgBodyLength = ntohl(msgBodyLength);
-
-                // 根据消息体长度读消息体
-                if (msgBodyLength == 0) continue; // 防止接收空字符串
-                char msgBody[msgBodyLength + 1]{};
-                boost::asio::read(sock, boost::asio::buffer(msgBody, msgBodyLength));
-
-                recvQueue.enqueue(std::string(msgBody));
+                recvQueue.enqueue(recvMsgFromSocket(sock));
             } catch (const std::exception &e) {
                 connErrFlag = true;
                 std::cerr << "Receive Error: " << e.what() << std::endl;

@@ -13,12 +13,12 @@ public:
         // 查询布隆过滤器默认设置
         std::map<std::string, std::string> data;
         data["client_uid"] = config.at("client_uid");
-        session.asyncSendMsg(doMsgAssembly(std::string("get_bloom_filter_default_config"), data));
+        session.asyncSendMsg(msgAssembly(std::string("get_bloom_filter_default_config"), data));
 
         // 接收布隆过滤器默认设置
         std::string event;
         std::map<std::string, std::string> data_;
-        doMsgParse(session.recvMsg(), event, data_);
+        msgParse(session.recvMsg(), event, data_);
 
         // 解析布隆过滤器默认设置
         if (event == "bloom_filter_default_config") {
@@ -51,10 +51,10 @@ public:
                                           stringToUInt(config.at("keepalive_interval")));
         }
 
-        // 启动节点上报线程
-        if (!nodeStatusReportThread.joinable()) {
-            nodeStatusReportThreadRunFlag.store(true);
-            nodeStatusReportThread = std::thread(&Scheduler::nodeStatusReportWorker, this,
+        // 启动布隆过滤器状态上报线程
+        if (!bloomFilterStatusReportThread.joinable()) {
+            bloomFilterStatusReportRunFlag.store(true);
+            bloomFilterStatusReportThread = std::thread(&Scheduler::bloomFilterStatusReport, this,
                                                  stringToUInt(config.at("node_status_report_interval")));
         }
     }
@@ -68,9 +68,9 @@ public:
         keepaliveThreadRunFlag.store(false);
         if (keepaliveThread.joinable()) keepaliveThread.join();
 
-        // 停止节点状态上报线程
-        nodeStatusReportThreadRunFlag.store(false);
-        if (nodeStatusReportThread.joinable()) nodeStatusReportThread.join();
+        // 停止布隆过滤器状态上报线程
+        bloomFilterStatusReportRunFlag.store(false);
+        if (bloomFilterStatusReportThread.joinable()) bloomFilterStatusReportThread.join();
     }
 
 private:
@@ -87,7 +87,7 @@ private:
             std::string msg = session.recvMsg();
             std::string event;
             std::map<std::string, std::string> data;
-            doMsgParse(msg, event, data);
+            msgParse(msg, event, data);
 
             if (event == "revoke_jwt") {
                 const std::string token = data["token"];
@@ -122,32 +122,32 @@ private:
 
     void keepaliveWorker(const unsigned int interval) const {
         while (keepaliveThreadRunFlag) {
-            std::this_thread::sleep_for(std::chrono::seconds(interval));
             const std::string event = "keepalive";
             std::map<std::string, std::string> data;
             data["client_uid"] = config.at("client_uid");
-            const std::string msg = doMsgAssembly(event, data);
+            data["node_port"] = config.at("server_port");
+            const std::string msg = msgAssembly(event, data);
             session.asyncSendMsg(msg);
+            std::this_thread::sleep_for(std::chrono::seconds(interval));
         }
     }
 
-    // 节点状态上报线程
-    std::atomic<bool> nodeStatusReportThreadRunFlag{false};
-    std::thread nodeStatusReportThread;
+    // 布隆过滤器状态上报线程
+    std::atomic<bool> bloomFilterStatusReportRunFlag{false};
+    std::thread bloomFilterStatusReportThread;
 
-    void nodeStatusReportWorker(const unsigned int interval) const {
-        while (nodeStatusReportThreadRunFlag) {
+    void bloomFilterStatusReport(const unsigned int interval) const {
+        while (bloomFilterStatusReportRunFlag) {
             std::this_thread::sleep_for(std::chrono::seconds(interval));
-            const std::string event = "node_status";
+            const std::string event = "bloom_filter_status";
             std::map<std::string, std::string> data;
             data["client_uid"] = config.at("client_uid");
             data["max_jwt_life_time"] = std::to_string(engine.getMaxJwtLifeTime()); // T^max_i
             data["rotation_interval"] = std::to_string(engine.getRotationInterval()); // T^w_i
             data["bloom_filter_size"] = std::to_string(engine.getBloomFilterSize()); // m^bf_i
             data["hash_function_num"] = std::to_string(engine.getHashFunctionNum()); // k^hash_i
-            data["bloom_filter_num"] = std::to_string(engine.getBloomFilterNum()); // n^bf_i
-            data["black_list_msg_num"] = vectorToString(engine.getBlackListMsgNum()); // n^jwt_(i-1,j)
-            const std::string msg = doMsgAssembly(event, data);
+            data["bloom_filter_filling_rate"] = vectorToString(engine.getBloomFilterFillingRate()); // n^jwt_(i-1,j)
+            const std::string msg = msgAssembly(event, data);
             session.asyncSendMsg(msg);
         }
     }

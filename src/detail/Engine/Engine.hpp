@@ -144,7 +144,7 @@ public:
     }
 
     // 查询是否在布隆过滤器中
-    bool isRevoke(const std::string &token, const time_t &expTime) const {
+    bool isRevoked(const std::string &token, const time_t &expTime) const {
         // 计算这个 token 还剩多长时间过期
         const auto now_c = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
         const time_t remainingTime = expTime - now_c;
@@ -178,13 +178,12 @@ public:
     unsigned long getRotationInterval() const { return rotationInterval; }
     size_t getBloomFilterSize() const { return bloomFilterSize; }
     unsigned int getHashFunctionNum() const { return hashFunctionNum; }
-    unsigned int getBloomFilterNum() const { return filtersNum; }
 
-    std::vector<unsigned long> getBlackListMsgNum() const {
-        std::vector<unsigned long> blackListMsgNum;
-        blackListMsgNum.reserve(filtersNum);
-        for (const auto &baseBloomFilter: filters) { blackListMsgNum.push_back(baseBloomFilter.getMsgNum()); }
-        return blackListMsgNum;
+    std::vector<unsigned long> getBloomFilterFillingRate() const {
+        std::vector<unsigned long> bloomFilterFillingRate;
+        bloomFilterFillingRate.reserve(filtersNum);
+        for (const auto &baseBloomFilter: filters) { bloomFilterFillingRate.push_back(baseBloomFilter.getMsgNum()); }
+        return bloomFilterFillingRate;
     }
 
 private:
@@ -236,7 +235,6 @@ private:
         std::time_t hourlyTimestamp = std::mktime(tm);
 
         // 文件路径列表和文件大小列表
-
         std::vector<std::filesystem::path> foundFiles;
         size_t fileSizes = 0;
 
@@ -251,11 +249,10 @@ private:
             hourlyTimestamp -= 3600; // 减去1小时
         }
 
-        // 遍历目录中的所有文件
+        // 遍历目录中的所有文件，如果文件不在foundFiles中，删除它
         std::set foundFilesSet(foundFiles.begin(), foundFiles.end());
         for (const auto &entry: std::filesystem::directory_iterator(config.at("log_file_path"))) {
             if (entry.is_regular_file()) {
-                // 如果文件不在foundFiles中，删除它
                 if (!foundFilesSet.contains(entry.path())) std::filesystem::remove(entry.path());
             }
         }

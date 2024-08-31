@@ -4,7 +4,7 @@
 #include "detail/Engine/Engine.hpp"
 #include "detail/MasterSession/MasterSession.hpp"
 #include "detail/Scheduler/Scheduler.hpp"
-#include "detail/Server/TCPServer.hpp"
+#include "detail/Server/Server.hpp"
 
 
 int main(const int argc, char* argv[]) {
@@ -34,8 +34,8 @@ int main(const int argc, char* argv[]) {
     // 启动调度器
     const Scheduler scheduler(config, session, engine);
 
-    // 启动对外服务
-    TCPServer server(config, engine);
+    // 启动服务
+    Server server(config, engine);
     server.run();
 
     return 0;
