@@ -4,49 +4,24 @@
 #include <iostream>
 #include <thread>
 #include <atomic>
+#include <string>
 #include <boost/asio.hpp>
 #include "../Utils/ThreadSafeQueue.hpp"
 #include "../Utils/StringParser.hpp"
-#include "../Utils/JsonStringMsg.hpp"
+#include "../Utils/JsonSerializer.hpp"
+#include "../Utils/SocketMsgFrame.hpp"
 
 using boost::asio::io_context;
 using boost::asio::awaitable;
 using boost::asio::use_awaitable;
 using boost::asio::ip::tcp;
 
-inline std::string recvMsgFromSocket(tcp::socket &sock) {
-    // 接收消息头
-    char msgHeaderBE[4]{};
-    boost::asio::read(sock, boost::asio::buffer(msgHeaderBE, 4));
-
-    // 网络字节序转为主机字节序
-    std::uint32_t msgBodyLength = 0;
-    std::memcpy(&msgBodyLength, msgHeaderBE, 4);
-    msgBodyLength = ntohl(msgBodyLength);
-
-    if (msgBodyLength == 0) return {};
-    std::vector<char> msgBody(msgBodyLength);
-    boost::asio::read(sock, boost::asio::buffer(msgBody.data(), msgBodyLength));
-    return {msgBody.begin(), msgBody.end()};
-}
-
-inline void sendMsgToSocket(tcp::socket &sock, const std::string &msg) {
-    if (msg.empty()) return ;
-    // 动态分配消息帧内存，包括 4 bytes 的消息长度和消息体
-    std::vector<char> msgFrame(4 + msg.size());
-    const auto msgLengthBE = htonl(msg.size());
-    std::memcpy(msgFrame.data(), &msgLengthBE, 4);
-    std::memcpy(msgFrame.data() + 4, msg.data(), msg.size());
-
-    boost::asio::write(sock, boost::asio::buffer(msgFrame, 4 + msg.size()));
-}
-
 class MasterSession {
 public:
-    explicit MasterSession(const std::map<std::string, std::string> &config) : config_(config) {
+    explicit MasterSession(const std::map<std::string, std::string> &config) : config(config) {
         // 读取配置
-        host_ = config.at("master_ip");
-        port_ = stringToUShort(config_.at("master_port"));
+        host = config.at("master_ip");
+        port = stringToUShort(config.at("master_port"));
 
         connect();
         watchDogRunFlag.store(true);
@@ -74,9 +49,9 @@ public:
     std::string recvMsg() { return recvQueue.dequeue(); }
 
 private:
-    const std::map<std::string, std::string> &config_;
-    std::string host_;
-    unsigned short port_;
+    const std::map<std::string, std::string> &config;
+    std::string host;
+    unsigned short port;
 
     io_context io_context_;
     tcp::socket sock{io_context_};
@@ -120,7 +95,7 @@ private:
 
     void connect() {
         tcp::resolver resolver(io_context_);
-        const auto endpoints = resolver.resolve(host_, std::to_string(port_));
+        const auto endpoints = resolver.resolve(host, std::to_string(port));
 
         while (true) {
             boost::system::error_code ec;
@@ -131,45 +106,26 @@ private:
                 // 发送认证请求
                 const std::string event = "hello_from_client";
                 std::map<std::string, std::string> data;
-                data["client_uid"] = config_.at("client_uid");
-                data["token"] = config_.at("token");
+                data["client_uid"] = config.at("client_uid");
+                data["token"] = config.at("token");
                 const std::string msg = msgAssembly(event, data);
+                sendMsgToSocket(sock, msg);
 
-                // 构建消息帧，包含4字节长度字段和消息体
-                char msgFrame[4 + msg.size() + 1]{};
-                auto msgLengthBE = htonl(msg.size());
-                std::memcpy(msgFrame, &msgLengthBE, 4);
-                std::memcpy(msgFrame + 4, msg.data(), msg.length());
-
-                // 发送消息
-                boost::asio::write(sock, boost::asio::buffer(msgFrame, 4 + msg.size()));
-
-                // 接收认证结果
-                char msgHeaderBE[4]{};
-                boost::asio::read(sock, boost::asio::buffer(msgHeaderBE, 4));
-
-                // 网络字节序转为主机字节序
-                std::uint32_t msgBodyLength = 0;
-                std::memcpy(&msgBodyLength, msgHeaderBE, 4);
-                msgBodyLength = ntohl(msgBodyLength);
-
-                // 根据消息体长度读消息体
-                if (msgBodyLength == 0) throw std::runtime_error("Authenticate failed, incorrect response.");
-                char msgBody[msgBodyLength + 1]{};
-                boost::asio::read(sock, boost::asio::buffer(msgBody, msgBodyLength));
-
-                // 解析消息体
+                // 接受认证请求
                 std::string event_;
                 std::map<std::string, std::string> data_;
-                msgParse(std::string(msgBody), event_, data_);
+                msgParse(recvMsgFromSocket(sock), event_, data_);
 
+                // 判断是否认证成功
                 if (event_ == "auth_success") {
                     std::cout << "[Master connection] Master Authenticate success" << std::endl;
                     break;
                 }
-                if (event_ == "auth_failed") throw std::runtime_error("Authenticate failed.");
+                if (event_ == "auth_failed")
+                    throw std::invalid_argument("Authenticate failed, node_uid: " + config.at("client_uid") +
+                                                ", node_token: " + config.at("token"));
             }
-            std::cerr << "[Master connection] connection lost, try again after 5 sec: " << ec.message() << std::endl;
+            std::cerr << "[Master connection] Connection failure, try again after 5 sec: " << ec.message() << std::endl;
             std::this_thread::sleep_for(std::chrono::seconds(5)); // 等待5秒再尝试重新连接
         }
     }
@@ -198,6 +154,5 @@ private:
         }
     }
 };
-
 
 #endif // TCP_SESSION_HPP

@@ -15,10 +15,12 @@ add_executable(JWTRevoker_BlackList
         src/detail/Utils/StringParser.hpp
         src/detail/Utils/ThreadSafeQueue.hpp
         src/detail/Utils/ConfigReader.hpp
-        src/detail/Utils/JsonStringMsg.hpp
+        src/detail/Utils/JsonSerializer.hpp
         src/detail/MasterSession/MasterSession.hpp
         src/detail/Server/Server.hpp
         src/detail/Server/CoroutineSafeQueue.hpp
+        src/detail/Utils/SocketMsgFrame.hpp
+        src/detail/Scheduler/NodeMessageSender.hpp
 )
 
 

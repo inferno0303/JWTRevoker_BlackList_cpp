@@ -5,6 +5,8 @@
 #include <string>
 #include "../Engine/Engine.hpp"
 #include "../MasterSession/MasterSession.hpp"
+#include "../Utils/JsonSerializer.hpp"
+#include "NodeMessageSender.hpp"
 
 class Scheduler {
 public:
@@ -55,7 +57,7 @@ public:
         if (!bloomFilterStatusReportThread.joinable()) {
             bloomFilterStatusReportRunFlag.store(true);
             bloomFilterStatusReportThread = std::thread(&Scheduler::bloomFilterStatusReport, this,
-                                                 stringToUInt(config.at("node_status_report_interval")));
+                                                        stringToUInt(config.at("node_status_report_interval")));
         }
     }
 
@@ -111,6 +113,27 @@ private:
                         std::ceil(maxJwtLifeTime / rotationInterval) * static_cast<unsigned long>(bloomFilterSize) /
                         8388608 << " MBytes" << std::endl;
                 engine.adjustFiltersParam(maxJwtLifeTime, rotationInterval, bloomFilterSize, hashFunctionNum);
+                // 回复
+                std::map<std::string, std::string> data_;
+                data_["client_uid"] = config.at("client_uid");
+                data_["uuid"] = data.at("uuid");
+                session.asyncSendMsg(msgAssembly("adjust_bloom_filter_done", data_));
+                continue;
+            }
+
+            // 当前节点被设置为 `slave_node` 时，需要启动 TCP 客户端连接到指定 `proxy_node` 并发送所有历史撤回记录
+            if (event == "transfer_to_proxy_node") {
+                const std::string attached_to = data.at("attached_to");
+                const std::string proxy_node_host = data.at("proxy_node_host");
+                const std::string proxy_node_port = data.at("proxy_node_port");
+                const std::string logFilePath = config.at("log_file_path");
+                auto sender = NodeMessageSender(proxy_node_host, stringToUShort(proxy_node_port), logFilePath);
+                sender.run();
+                // 回复
+                std::map<std::string, std::string> data_;
+                data_["client_uid"] = config.at("client_uid");
+                data_["uuid"] = data.at("uuid");
+                session.asyncSendMsg(msgAssembly("transfer_to_proxy_node_done", data_));
                 continue;
             }
         }

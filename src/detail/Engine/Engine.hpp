@@ -274,6 +274,8 @@ private:
                     // 解析 expTime（字符串）
                     if (std::string expTimeStr; std::getline(iss, expTimeStr)) {
                         auto expTime = static_cast<time_t>(std::stol(expTimeStr));
+                        // 跳过已经自然过期的记录
+                        if (expTime < std::chrono::system_clock::to_time_t(std::chrono::system_clock::now())) continue;
 
                         // 写入布隆过滤器
                         const time_t remainingTime = expTime - std::chrono::system_clock::to_time_t(

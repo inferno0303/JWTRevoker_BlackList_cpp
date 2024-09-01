@@ -11,7 +11,7 @@ class BaseBloomFilter {
 public:
     BaseBloomFilter(const size_t size, const unsigned int hashFunctionNum) {
         if (size == 0) throw std::invalid_argument("The size of Bloom filter cannot be zero");
-        if ((size & size - 1) == 0) throw std::invalid_argument("The size of a Bloom filter must be a power of 2.");
+        if ((size & (size - 1)) != 0) throw std::invalid_argument("The size of a Bloom filter must be a power of 2.");
         if (hashFunctionNum == 0) throw std::invalid_argument("The number of hash functions cannot be zero");
 
         // 初始化基本布隆过滤器
