@@ -4,10 +4,11 @@
 #include <map>
 #include <boost/asio.hpp>
 #include "../Engine/Engine.hpp"
+#include "../Scheduler/Scheduler.hpp"
 #include "CoroutineSafeQueue.hpp"
 #include "../Utils/JsonSerializer.hpp"
 #include "../Utils/StringParser.hpp"
-#include "../Utils/MsgSendRecv.hpp"
+#include "../Utils/SocketMsgFrame.hpp"
 
 using boost::asio::io_context;
 using boost::asio::awaitable;
@@ -16,7 +17,8 @@ using boost::asio::ip::tcp;
 
 class Server {
 public:
-    Server(const std::map<std::string, std::string> &config_, Engine &engine_) : config(config_), engine(engine_) {
+    Server(const std::map<std::string, std::string> &config_, Engine &engine_, Scheduler &scheduler_)
+        : config(config_), engine(engine_), scheduler(scheduler_) {
     }
 
     ~Server() = default;
@@ -36,6 +38,7 @@ public:
 private:
     const std::map<std::string, std::string> &config;
     Engine &engine;
+    Scheduler &scheduler;
 
     awaitable<void> listener(io_context &ioc) const {
         auto server_port = stringToUShort(config.at("server_port")); // 读取配置文件的端口号
@@ -55,7 +58,7 @@ private:
         try {
             auto recv = co_spawn(ioc, recvTask(sock, recvQueue), use_awaitable);
             auto send = co_spawn(ioc, sendTask(sock, sendQueue), use_awaitable);
-            auto process = co_spawn(ioc, processTask(recvQueue, sendQueue, engine), use_awaitable);
+            auto process = co_spawn(ioc, processTask(recvQueue, sendQueue), use_awaitable);
             co_await std::move(recv);
             co_await std::move(send);
             co_await std::move(process);
@@ -79,9 +82,8 @@ private:
         }
     }
 
-    static awaitable<void> processTask(CoroutineSafeQueue<std::string> &recvQueue,
-                                CoroutineSafeQueue<std::string> &sendQueue,
-                                Engine &engine) {
+    awaitable<void> processTask(CoroutineSafeQueue<std::string> &recvQueue,
+                                CoroutineSafeQueue<std::string> &sendQueue) const {
         while (true) {
             auto message = co_await recvQueue.dequeue();
             std::string event;
@@ -92,19 +94,31 @@ private:
             if (event == "is_jwt_revoked") {
                 const std::string token = data["token"];
                 const std::string expTime = data["exp_time"];
-                const bool isRevoked = engine.isRevoked(token, stringToTimestamp(expTime));
-
-                std::map<std::string, std::string> data_;
-                data_["token"] = token;
-                data_["expTime"] = expTime;
-                data_["status"] = isRevoked ? "revoked" : "active";
-                const std::string resp = msgAssembly("is_jwt_revoked_response", data_);
-                sendQueue.enqueue(resp);
-                continue;
+                if (scheduler.getNodeRole() == "single_node" || scheduler.getNodeRole() == "proxy_node") {
+                    const bool isRevoked = engine.isRevoked(token, stringToTimestamp(expTime));
+                    std::map<std::string, std::string> data_;
+                    data_["token"] = token;
+                    data_["expTime"] = expTime;
+                    data_["status"] = isRevoked ? "revoked" : "active";
+                    const std::string resp = msgAssembly("is_jwt_revoked_response", data_);
+                    sendQueue.enqueue(resp);
+                    continue;
+                }
+                if (scheduler.getNodeRole() == "slave_node") {
+                    // 如果是salve_node，则委托 proxy_node 查询（代理查询）
+                    const bool isRevoked = scheduler.proxyQuery(token, stringToTimestamp(expTime));
+                    std::map<std::string, std::string> data_;
+                    data_["token"] = token;
+                    data_["expTime"] = expTime;
+                    data_["status"] = isRevoked ? "revoked" : "active";
+                    const std::string resp = msgAssembly("is_jwt_revoked_response", data_);
+                    sendQueue.enqueue(resp);
+                    continue;
+                }
             }
 
             // 当前节点被设置为 `proxy_node` 时，接受其他节点的插入请求
-            if (event == "revoke_jwt") {
+            if (event == "revoke_jwt" && scheduler.getNodeRole() == "proxy_node") {
                 const std::string token = data["token"];
                 const std::string expTime = data["exp_time"];
                 engine.revokeJwt(token, stringToTimestamp(expTime));

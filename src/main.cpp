@@ -7,14 +7,13 @@
 #include "detail/Server/Server.hpp"
 
 
-int main(const int argc, char* argv[]) {
+int main(const int argc, char *argv[]) {
     std::string configFilePath = R"(C:\MyProjects\JWTRevoker_BlackList_cpp\src\config.txt)"; // 默认配置文件路径
 
     // 解析命令行参数，查找 "-c" 参数来获取配置文件路径
     for (int i = 1; i < argc; ++i) {
         if (std::string(argv[i]) == "-c") {
-            if (i + 1 < argc) { configFilePath = argv[i + 1]; }
-            else {
+            if (i + 1 < argc) { configFilePath = argv[i + 1]; } else {
                 std::cerr << "Error: -c option requires a file path argument." << std::endl;
                 return 1; // 返回错误代码
             }
@@ -32,10 +31,10 @@ int main(const int argc, char* argv[]) {
     Engine engine(config);
 
     // 启动调度器
-    const Scheduler scheduler(config, session, engine);
+    Scheduler scheduler(config, session, engine);
 
     // 启动服务
-    Server server(config, engine);
+    const Server server(config, engine, scheduler);
     server.run();
 
     return 0;

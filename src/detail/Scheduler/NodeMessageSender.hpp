@@ -18,16 +18,28 @@ using boost::asio::ip::tcp;
 
 class NodeMessageSender {
 public:
-    NodeMessageSender(const std::string &host, const unsigned short port, const std::string &logFilePath)
-        : logFilePath(logFilePath) {
-        sock = connect(host, port);
-    }
+    NodeMessageSender() = default;
 
     ~NodeMessageSender() {
-        sock.close();
+        if (sock.is_open()) sock.close();
     }
 
-    void run() {
+    void connect(const std::string &host, const unsigned short port) {
+        tcp::resolver resolver(io_context_);
+        const auto endpoints = resolver.resolve(host, std::to_string(port));
+        while (true) {
+            boost::system::error_code ec;
+            const auto connected_endpoint = boost::asio::connect(sock, endpoints, ec);
+            if (!ec) {
+                std::cout << "[NodeMessageSender] Proxy node connected: " << connected_endpoint << std::endl;
+            }
+            std::cerr << "[NodeMessageSender] Connection failure, try again after 5 sec: " << ec.message() <<
+                    std::endl;
+            std::this_thread::sleep_for(std::chrono::seconds(5)); // 等待5秒再尝试重新连接
+        }
+    }
+
+    void sendLogToProxyNode(const std::string &logFilePath) {
         // 计算当前时刻的整点时间戳
         const std::time_t now_c = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
         std::tm *tm = std::localtime(&now_c);
@@ -68,7 +80,8 @@ public:
                     if (std::string expTimeStr; std::getline(iss, expTimeStr)) {
                         // 跳过已经自然过期的记录
                         if (auto expTime = static_cast<time_t>(std::stol(expTimeStr));
-                            expTime < std::chrono::system_clock::to_time_t(std::chrono::system_clock::now())) continue;
+                            expTime < std::chrono::system_clock::to_time_t(std::chrono::system_clock::now()))
+                            continue;
 
                         // 发送
                         std::map<std::string, std::string> data;
@@ -91,27 +104,42 @@ public:
         std::cout << "[Engine] Recover from log is done, " << fileSizes / 49 << " items have been loaded." << std::endl;
     }
 
+    // 询问 proxy_node 某个jwt是否被撤回
+    bool isRevoked(const std::string &token, const std::string &expTimeStr) {
+        std::map<std::string, std::string> data_;
+        data_["token"] = token;
+        data_["expTime"] = expTimeStr;
+        sendMsgToSocket(sock, msgAssembly("is_jwt_revoked", data_));
+        // 监听回执
+        const std::string reply = recvMsgFromSocket(sock);
+        std::string event;
+        std::map<std::string, std::string> data;
+        msgParse(reply, event, data);
+        if (data.at("status") == "revoked") {
+            return true;
+        }
+        if (data.at("status") == "active") {
+            return false;
+        }
+        return true;
+    }
+
+    // 将 jwt 发送到 proxy_node 的布隆过滤器
+    void revokeJwt(const std::string &token, const std::string &expTimeStr) {
+        std::map<std::string, std::string> data;
+        data["token"] = token;
+        data["exp_time"] = expTimeStr;
+        const std::string msg = msgAssembly("revoke_jwt", data);
+        sendMsgToSocket(sock, msg);
+    }
+
+    void disconnect() {
+        if (sock.is_open()) sock.close();
+    }
+
 private:
     io_context io_context_;
     tcp::socket sock{io_context_};
-    const std::string &logFilePath;
-
-    tcp::socket connect(const std::string &host, const unsigned short port) {
-        tcp::resolver resolver(io_context_);
-        const auto endpoints = resolver.resolve(host, std::to_string(port));
-        tcp::socket sock{io_context_};
-        while (true) {
-            boost::system::error_code ec;
-            const auto connected_endpoint = boost::asio::connect(sock, endpoints, ec);
-            if (!ec) {
-                std::cout << "[NodeMessageSender] Proxy node connected: " << connected_endpoint << std::endl;
-                return sock;
-            }
-            std::cerr << "[NodeMessageSender] Connection failure, try again after 5 sec: " << ec.message() <<
-                    std::endl;
-            std::this_thread::sleep_for(std::chrono::seconds(5)); // 等待5秒再尝试重新连接
-        }
-    }
 };
 
 #endif //NODE_MESSAGE_SENDER_HPP
