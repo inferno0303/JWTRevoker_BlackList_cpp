@@ -75,6 +75,7 @@ public:
         if (bloomFilterStatusReportThread.joinable()) bloomFilterStatusReportThread.join();
     }
 
+    // 代理查询
     bool proxyQuery(const std::string &token, const time_t &expTime) {
         return nodeMessageSender.isRevoked(token, std::to_string(expTime));
     }
@@ -105,81 +106,89 @@ private:
                 const std::string token = data["token"];
                 const std::string expTime = data["exp_time"];
 
-                // 如果 `node_role` 是 `single_node` 或 `proxy_node`，则在自己的布隆过滤器中撤回
                 if (nodeRole == "single_node" || nodeRole == "proxy_node") {
+                    // 如果 `node_role` 是 `single_node` 或 `proxy_node`，则在自己的布隆过滤器中撤回
                     engine.revokeJwt(token, stringToTimestamp(expTime));
                 } else if (nodeRole == "slave_node") {
                     // 如果是 `slave_node`，则将jwt发送给 proxy_node 撤回
                     nodeMessageSender.revokeJwt(token, expTime);
                 }
-                engine.logRevoke(token, stringToTimestamp(expTime));
+                engine.logRevoke(token, stringToTimestamp(expTime)); // 不管是什么模式，都要写日志
                 std::cout << "[revoke_jwt][" << nodeRole << "] " << token << std::endl;
                 continue;
             }
 
             // 调整参数，更改服务器角色，并重建布隆过滤器
             if (event == "adjust_bloom_filter") {
-                const unsigned int maxJwtLifeTime = stringToUInt(data.at("max_jwt_life_time"));
-                const unsigned int rotationInterval = stringToUInt(data.at("rotation_interval"));
-                const size_t bloomFilterSize = stringToSizeT(data.at("bloom_filter_size"));
-                const unsigned int hashFunctionNum = stringToUInt(data.at("hash_function_num"));
+                const std::string node_role = data.at("node_role");
 
-                std::cout << "[Scheduler] " << "nodeMode: " << nodeRole << "maxJwtLifeTime: " << maxJwtLifeTime <<
-                        ", rotationInterval: " << rotationInterval << ", bloomFilterSize: " << bloomFilterSize <<
-                        ", hashFunctionNum: " << hashFunctionNum << std::endl;
-
-                // 判断 node_mode
-                // 如果是 `single_node`，则直接调整布隆过滤器大小，并回执
-                // 如果是 `proxy_node`，则直接调整布隆过滤器大小，并回执
-                // 如果是 `slave_node`，则直接调整布隆过滤器大小，并启动一个客户端，将log发送给 proxy_node，然后回执
-                if (data.at("node_rode") == "single_node") {
-                    // 调整布隆过滤器大小
+                // single_node 逻辑
+                if (node_role == "single_node") {
+                    nodeRole = node_role;
+                    nodeMessageSender.disconnect();
+                    const unsigned int maxJwtLifeTime = stringToUInt(data.at("max_jwt_life_time"));
+                    const unsigned int rotationInterval = stringToUInt(data.at("rotation_interval"));
+                    const size_t bloomFilterSize = stringToSizeT(data.at("bloom_filter_size"));
+                    const unsigned int hashFunctionNum = stringToUInt(data.at("hash_function_num"));
+                    // 调整
                     engine.adjustFiltersParam(maxJwtLifeTime, rotationInterval, bloomFilterSize, hashFunctionNum);
                     // 回执
                     std::map<std::string, std::string> data_;
-                    data_["client_uid"] = config.at("client_uid");
+                    data_["node_uid"] = config.at("client_uid");
                     data_["uuid"] = data.at("uuid");
-                    data_["node_role"] = nodeRole;
+                    data_["node_role"] = node_role;
                     session.asyncSendMsg(msgAssembly("adjust_bloom_filter_done", data_));
-                    // 转换状态
-                    nodeRole = data.at("node_rode");
+                    // 打印
+                    std::cout << "[Scheduler] " << "nodeMode: " << nodeRole << " maxJwtLifeTime: " << maxJwtLifeTime <<
+                            ", rotationInterval: " << rotationInterval << ", bloomFilterSize: " << bloomFilterSize <<
+                            ", hashFunctionNum: " << hashFunctionNum << std::endl;
                     continue;
                 }
-                // 当前节点被设置为 `proxy_node`，则直接调整布隆过滤器大小，并回执
-                if (data.at("node_rode") == "proxy_node") {
-                    // 调整布隆过滤器大小
+
+                // proxy_node 逻辑
+                if (node_role == "proxy_node") {
+                    nodeRole = node_role;
+                    nodeMessageSender.disconnect();
+                    const unsigned int maxJwtLifeTime = stringToUInt(data.at("max_jwt_life_time"));
+                    const unsigned int rotationInterval = stringToUInt(data.at("rotation_interval"));
+                    const size_t bloomFilterSize = stringToSizeT(data.at("bloom_filter_size"));
+                    const unsigned int hashFunctionNum = stringToUInt(data.at("hash_function_num"));
+                    // 调整
                     engine.adjustFiltersParam(maxJwtLifeTime, rotationInterval, bloomFilterSize, hashFunctionNum);
                     // 回执
                     std::map<std::string, std::string> data_;
-                    data_["client_uid"] = config.at("client_uid");
+                    data_["node_uid"] = config.at("client_uid");
                     data_["uuid"] = data.at("uuid");
-                    data_["node_role"] = nodeRole;
+                    data_["node_role"] = node_role;
                     session.asyncSendMsg(msgAssembly("adjust_bloom_filter_done", data_));
-                    // 转换状态
-                    nodeRole = data.at("node_rode");
+                    // 打印
+                    std::cout << "[Scheduler] " << "nodeMode: " << nodeRole << " maxJwtLifeTime: " << maxJwtLifeTime <<
+                            ", rotationInterval: " << rotationInterval << ", bloomFilterSize: " << bloomFilterSize <<
+                            ", hashFunctionNum: " << hashFunctionNum << std::endl;
                     continue;
                 }
-                // 当前节点被设置为 `slave_node` 时，需要启动 TCP 客户端连接到指定 `proxy_node` 并发送所有历史撤回记录
-                if (data.at("node_rode") == "slave_node") {
-                    // 调整布隆过滤器大小（设置为近乎为0的占用）
-                    engine.adjustFiltersParam(86400, 3600, 2, 5);
-                    // 启动TCP客户端，将log发送给 proxy_node
-                    const std::string attached_to = data.at("attached_to");
+
+                // single_node 逻辑
+                if (node_role == "slave_node") {
+                    nodeRole = node_role;
+                    nodeMessageSender.disconnect();
+                    // 启动TCP客户端，将 log 发送给 proxy_node
                     const std::string proxy_node_host = data.at("proxy_node_host");
                     const std::string proxy_node_port = data.at("proxy_node_port");
-                    nodeMessageSender.disconnect(); // 先断开连接
                     nodeMessageSender.connect(proxy_node_host, stringToUShort(proxy_node_port));
                     nodeMessageSender.sendLogToProxyNode(config.at("log_file_path"));
+                    // 调整
+                    engine.adjustFiltersParam(86400, 86400, 8, 1);
                     // 回执
                     std::map<std::string, std::string> data_;
-                    data_["client_uid"] = config.at("client_uid");
+                    data_["node_uid"] = config.at("client_uid");
                     data_["uuid"] = data.at("uuid");
-                    data_["node_role"] = nodeRole;
+                    data_["node_role"] = node_role;
                     session.asyncSendMsg(msgAssembly("adjust_bloom_filter_done", data_));
-                    // 转换状态
-                    nodeRole = data.at("node_rode");
-                    continue;
+                    // 打印
+                    std::cout << "[Scheduler] " << "nodeMode: " << nodeRole << std::endl;
                 }
+                continue;
             }
         }
     }

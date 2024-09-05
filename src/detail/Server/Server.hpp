@@ -44,7 +44,7 @@ private:
         auto server_port = stringToUShort(config.at("server_port")); // 读取配置文件的端口号
         auto endpoint = tcp::endpoint({tcp::v4(), server_port});
         tcp::acceptor acceptor(ioc, endpoint);
-        std::cout << "Server is running at: " << endpoint << std::endl;
+        std::cout << "Server is running at: " << endpoint << std::endl << std::endl;
         while (true) {
             tcp::socket socket = co_await acceptor.async_accept(use_awaitable);
             co_spawn(ioc, handleClient(std::move(socket), ioc), boost::asio::detached);
@@ -94,6 +94,7 @@ private:
             if (event == "is_jwt_revoked") {
                 const std::string token = data["token"];
                 const std::string expTime = data["exp_time"];
+                // 如果是 single_node 或 proxy_node 模式，则查询自身的布隆过滤器
                 if (scheduler.getNodeRole() == "single_node" || scheduler.getNodeRole() == "proxy_node") {
                     const bool isRevoked = engine.isRevoked(token, stringToTimestamp(expTime));
                     std::map<std::string, std::string> data_;
@@ -104,8 +105,8 @@ private:
                     sendQueue.enqueue(resp);
                     continue;
                 }
+                // 如果是salve_node，则委托 proxy_node 查询（代理查询）
                 if (scheduler.getNodeRole() == "slave_node") {
-                    // 如果是salve_node，则委托 proxy_node 查询（代理查询）
                     const bool isRevoked = scheduler.proxyQuery(token, stringToTimestamp(expTime));
                     std::map<std::string, std::string> data_;
                     data_["token"] = token;
